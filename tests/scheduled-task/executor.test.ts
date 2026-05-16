@@ -92,9 +92,38 @@ function createAssistantMessage(
     completed?: boolean;
     error?: unknown;
     summary?: boolean;
+    finish?: string;
+    stepFinishReason?: string;
     parts?: Array<Record<string, unknown>>;
   } = {},
 ) {
+  const generatedParts: Array<Record<string, unknown>> = [];
+  if (text) {
+    generatedParts.push({
+      id: "part-1",
+      sessionID: "session-1",
+      messageID: "assistant-1",
+      type: "text",
+      text,
+    });
+  }
+  if (options.stepFinishReason) {
+    generatedParts.push({
+      id: "finish-1",
+      sessionID: "session-1",
+      messageID: "assistant-1",
+      type: "step-finish",
+      reason: options.stepFinishReason,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+    });
+  }
+
   return {
     info: {
       id: "assistant-1",
@@ -118,12 +147,9 @@ function createAssistantMessage(
       },
       error: options.error,
       summary: options.summary,
+      finish: options.finish,
     },
-    parts:
-      options.parts ??
-      (text
-        ? [{ id: "part-1", sessionID: "session-1", messageID: "assistant-1", type: "text", text }]
-        : []),
+    parts: options.parts ?? generatedParts,
   };
 }
 
@@ -314,7 +340,7 @@ describe("scheduled-task/executor", () => {
     });
     mocked.promptAsyncMock.mockResolvedValueOnce({ data: undefined, error: null });
     mocked.messagesMock.mockResolvedValue({
-      data: [createAssistantMessage("", { completed: true })],
+      data: [createAssistantMessage("", { completed: true, stepFinishReason: "stop" })],
       error: null,
     });
 
@@ -341,7 +367,8 @@ describe("scheduled-task/executor", () => {
         assistantMessage: expect.objectContaining({
           completed: true,
           summary: false,
-          parts: [],
+          finish: "stop",
+          parts: [expect.objectContaining({ type: "step-finish", reason: "stop" })],
         }),
       }),
     );
@@ -389,6 +416,59 @@ describe("scheduled-task/executor", () => {
     });
     expect(mocked.messagesMock).toHaveBeenCalledTimes(4);
     expect(mocked.deleteMock).toHaveBeenCalledWith({ sessionID: "session-1" });
+  });
+
+  it("waits for the final assistant response after completed tool-call turns", async () => {
+    const { executeScheduledTask } = await import("../../src/scheduled-task/executor.js");
+
+    const toolCallTurn = createAssistantMessage("", {
+      completed: true,
+      stepFinishReason: "tool-calls",
+    });
+
+    mocked.createMock.mockResolvedValueOnce({
+      data: { id: "session-1", directory: "D:\\Projects\\Repo", title: "Scheduled task run" },
+      error: null,
+    });
+    mocked.promptAsyncMock.mockResolvedValueOnce({ data: undefined, error: null });
+    mocked.messagesMock
+      .mockResolvedValueOnce({ data: [toolCallTurn], error: null })
+      .mockResolvedValueOnce({ data: [toolCallTurn], error: null })
+      .mockResolvedValueOnce({ data: [toolCallTurn], error: null })
+      .mockResolvedValueOnce({ data: [toolCallTurn], error: null })
+      .mockResolvedValueOnce({
+        data: [
+          toolCallTurn,
+          createAssistantMessage("SCHEDULED_TASK_FINAL_OK", {
+            completed: true,
+            stepFinishReason: "stop",
+          }),
+        ],
+        error: null,
+      });
+    mocked.statusMock.mockResolvedValue({
+      data: { "session-1": { type: "busy" } },
+      error: null,
+    });
+
+    vi.useFakeTimers();
+
+    const resultPromise = executeScheduledTask(createTask());
+
+    await vi.advanceTimersByTimeAsync(8000);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      status: "success",
+      resultText: "SCHEDULED_TASK_FINAL_OK",
+      errorMessage: null,
+    });
+    expect(mocked.messagesMock).toHaveBeenCalledTimes(5);
+    expect(mocked.statusMock).toHaveBeenCalledTimes(4);
+    expect(mocked.deleteMock).toHaveBeenCalledWith({ sessionID: "session-1" });
+    expect(mocked.loggerWarnMock).not.toHaveBeenCalledWith(
+      "[ScheduledTaskExecutor] Empty completed assistant response diagnostics",
+      expect.anything(),
+    );
   });
 
   it("ignores technical summary assistant messages when finding the scheduled task result", async () => {
