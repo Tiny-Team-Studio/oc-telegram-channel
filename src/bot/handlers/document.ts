@@ -76,6 +76,42 @@ export async function handleDocumentMessage(
       return;
     }
 
+    if (mimeType.startsWith("image/")) {
+      const storedModel = getStored();
+      const capabilities = await getCapabilities(storedModel.providerID, storedModel.modelID);
+
+      if (!supportsInput(capabilities, "image")) {
+        logger.warn(
+          `[Document] Model ${storedModel.providerID}/${storedModel.modelID} doesn't support image input`,
+        );
+        await ctx.reply(t("bot.photo_model_no_image"));
+
+        if (caption.trim().length > 0) {
+          await processPrompt(ctx, caption, deps);
+        }
+        return;
+      }
+
+      await ctx.reply(t("bot.file_downloading"));
+      const downloadedFile = await downloadFile(ctx.api, doc.file_id);
+
+      const dataUri = toDataUri(downloadedFile.buffer, mimeType);
+
+      const filePart: FilePartInput = {
+        type: "file",
+        mime: mimeType,
+        filename: filename,
+        url: dataUri,
+      };
+
+      logger.info(
+        `[Document] Sending image (${downloadedFile.buffer.length} bytes, ${filename}, ${mimeType}) with prompt`,
+      );
+
+      await processPrompt(ctx, caption, deps, [filePart]);
+      return;
+    }
+
     if (mimeType === "application/pdf") {
       const storedModel = getStored();
       const capabilities = await getCapabilities(storedModel.providerID, storedModel.modelID);
@@ -112,7 +148,8 @@ export async function handleDocumentMessage(
       return;
     }
 
-    logger.debug(`[Document] Unsupported document MIME type: ${mimeType}, ignoring`);
+    logger.warn(`[Document] Unsupported document MIME type: ${mimeType}, filename=${filename}`);
+    await ctx.reply(t("bot.file_type_unsupported"));
   } catch (err) {
     logger.error("[Document] Error handling document message:", err);
     await ctx.reply(t("bot.file_download_error"));

@@ -89,6 +89,8 @@ export const en = {
   "bot.file_downloading": "⏳ Downloading file...",
   "bot.file_too_large": "⚠️ File is too large (max {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 Failed to download file",
+  "bot.file_type_unsupported":
+    "⚠️ This file type is not supported. Send an image, PDF, or text/code file.",
   "bot.model_no_pdf": "⚠️ Current model doesn't support PDF input. Sending text only.",
   "bot.text_file_too_large": "⚠️ Text file is too large (max {maxSizeKb}KB)",
 

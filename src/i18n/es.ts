@@ -96,6 +96,8 @@ export const es: I18nDictionary = {
   "bot.file_downloading": "⏳ Descargando archivo...",
   "bot.file_too_large": "⚠️ El archivo es demasiado grande (max {maxSizeMb}MB)",
   "bot.file_download_error": "🔴 No se pudo descargar el archivo",
+  "bot.file_type_unsupported":
+    "⚠️ Este tipo de archivo no es compatible. Envía una imagen, PDF o archivo de texto/código.",
   "bot.model_no_pdf": "⚠️ El modelo actual no admite entrada PDF. Enviaré solo texto.",
   "bot.text_file_too_large": "⚠️ El archivo de texto es demasiado grande (max {maxSizeKb}KB)",
 
