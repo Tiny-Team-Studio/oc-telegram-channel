@@ -20,6 +20,8 @@ const mocked = vi.hoisted(() => ({
     directory: "D:\\Projects\\Repo",
   } as { id: string; title: string; directory: string } | null,
   sessionMessagesMock: vi.fn(),
+  sessionGetMock: vi.fn(),
+  sessionRevertMock: vi.fn(),
 }));
 
 vi.mock("../../../src/settings/manager.js", () => ({
@@ -34,6 +36,8 @@ vi.mock("../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
       messages: mocked.sessionMessagesMock,
+      get: mocked.sessionGetMock,
+      revert: mocked.sessionRevertMock,
     },
   },
 }));
@@ -87,6 +91,14 @@ describe("bot/commands/messages", () => {
       directory: "D:\\Projects\\Repo",
     };
     mocked.sessionMessagesMock.mockReset();
+    mocked.sessionGetMock.mockReset();
+    mocked.sessionRevertMock.mockReset();
+
+    // Default: session without revert
+    mocked.sessionGetMock.mockResolvedValue({
+      data: { id: "session-1", directory: "D:\\Projects\\Repo" },
+      error: null,
+    });
   });
 
   it("asks to select project when project is missing", async () => {
@@ -185,7 +197,50 @@ describe("bot/commands/messages", () => {
     await messagesCommand(ctx as never);
 
     expect(ctx.reply).toHaveBeenCalledWith(t("messages.empty"));
-    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("filters messages to show only those before revert point", async () => {
+    const time1 = new Date(2026, 4, 30, 10, 0).getTime();
+    const time2 = new Date(2026, 4, 30, 11, 0).getTime();
+    const time3 = new Date(2026, 4, 30, 12, 0).getTime();
+
+    mocked.sessionMessagesMock.mockResolvedValue({
+      data: [
+        makeUserMessage("msg-1", "first message", time1),
+        makeUserMessage("msg-2", "second message", time2),
+        makeUserMessage("msg-3", "third message", time3),
+      ],
+      error: null,
+    });
+
+    // Session has revert to msg-2, so only msg-1 should be shown
+    mocked.sessionGetMock.mockResolvedValue({
+      data: {
+        id: "session-1",
+        directory: "D:\\Projects\\Repo",
+        revert: { messageID: "msg-2" },
+      },
+      error: null,
+    });
+
+    const ctx = createCommandContext(202);
+    await messagesCommand(ctx as never);
+
+    const [, options] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      { reply_markup: { inline_keyboard: Array<Array<{ callback_data?: string; text: string }>> } },
+    ];
+
+    // Should only show msg-1 (before the revert point)
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.callback_data).toBe("messages:select:0");
+    expect(options.reply_markup.inline_keyboard[0]?.[0]?.text).toContain("first message");
+    // msg-2 and msg-3 should not be present
+    expect(options.reply_markup.inline_keyboard[1]?.[0]?.callback_data).toBe("messages:cancel");
+
+    const state = interactionManager.getSnapshot();
+    expect(state?.metadata.messages).toEqual([
+      { id: "msg-1", text: "first message", created: time1 },
+    ]);
   });
 
   it("handles pagination callbacks", async () => {
@@ -338,7 +393,106 @@ describe("bot/commands/messages", () => {
     expect(interactionManager.getSnapshot()).toBeNull();
   });
 
-  it("keeps detail screen unchanged for revert and fork placeholders", async () => {
+  it("reverts message successfully", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "detail",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages,
+        page: 0,
+        selectedIndex: 0,
+      },
+    });
+
+    mocked.sessionRevertMock.mockResolvedValue({});
+
+    const ctx = createCallbackContext("messages:revert", 600);
+    const handled = await handleMessagesCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    expect(mocked.sessionRevertMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      directory: "D:\\Projects\\Repo",
+      messageID: "msg-1",
+    });
+    expect(ctx.editMessageText).toHaveBeenCalledWith(
+      t("messages.revert_success", { text: "test prompt" }),
+      { reply_markup: undefined },
+    );
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("handles revert error", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "detail",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages,
+        page: 0,
+        selectedIndex: 0,
+      },
+    });
+
+    mocked.sessionRevertMock.mockRejectedValue(new Error("API error"));
+
+    const ctx = createCallbackContext("messages:revert", 600);
+    const handled = await handleMessagesCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    expect(mocked.sessionRevertMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      directory: "D:\\Projects\\Repo",
+      messageID: "msg-1",
+    });
+    expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.revert_error"), {
+      reply_markup: undefined,
+    });
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("rejects revert from list stage", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "list",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages,
+        page: 0,
+      },
+    });
+
+    const ctx = createCallbackContext("messages:revert", 600);
+    const handled = await handleMessagesCallback(ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("messages.inactive_callback"),
+      show_alert: true,
+    });
+    expect(mocked.sessionRevertMock).not.toHaveBeenCalled();
+    expect(ctx.editMessageText).not.toHaveBeenCalled();
+  });
+
+  it("keeps detail screen unchanged for fork placeholder", async () => {
     interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
@@ -354,7 +508,7 @@ describe("bot/commands/messages", () => {
       },
     });
 
-    const ctx = createCallbackContext("messages:revert", 600);
+    const ctx = createCallbackContext("messages:fork", 600);
     const handled = await handleMessagesCallback(ctx);
 
     expect(handled).toBe(true);

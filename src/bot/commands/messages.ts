@@ -305,7 +305,15 @@ async function loadUserMessages(sessionId: string, directory: string): Promise<U
     throw error || new Error("No message data received");
   }
 
-  return (data as SessionMessageLike[])
+  // Get session info to check for revert
+  const { data: sessionData } = await opencodeClient.session.get({
+    sessionID: sessionId,
+    directory,
+  });
+
+  const revertMessageID = sessionData?.revert?.messageID;
+
+  const messages = (data as SessionMessageLike[])
     .map((message) => {
       if (message.info.role !== "user") {
         return null;
@@ -324,6 +332,17 @@ async function loadUserMessages(sessionId: string, directory: string): Promise<U
     })
     .filter((message): message is UserMessageItem => Boolean(message))
     .sort((a, b) => b.created - a.created);
+
+  // If there's a revert, filter messages to only include those before the revert point
+  // Messages are sorted newest first, so we need to skip the revert message and everything after it
+  if (revertMessageID) {
+    const revertIndex = messages.findIndex((msg) => msg.id === revertMessageID);
+    if (revertIndex !== -1) {
+      return messages.slice(revertIndex + 1);
+    }
+  }
+
+  return messages;
 }
 
 function parseSelectIndex(data: string): number | null {
@@ -406,7 +425,42 @@ export async function handleMessagesCallback(ctx: Context): Promise<boolean> {
   }
 
   try {
-    if (data === MESSAGES_CALLBACK_REVERT || data === MESSAGES_CALLBACK_FORK) {
+    if (data === MESSAGES_CALLBACK_REVERT) {
+      if (metadata.stage !== "detail") {
+        await ctx.answerCallbackQuery({ text: t("messages.inactive_callback"), show_alert: true });
+        return true;
+      }
+
+      const selectedMessage = metadata.messages[metadata.selectedIndex];
+      if (!selectedMessage) {
+        await ctx.answerCallbackQuery({ text: t("messages.fetch_error"), show_alert: true });
+        return true;
+      }
+
+      await ctx.answerCallbackQuery();
+
+      try {
+        await opencodeClient.session.revert({
+          sessionID: metadata.sessionId,
+          directory: metadata.projectDirectory,
+          messageID: selectedMessage.id,
+        });
+
+        const successText = t("messages.revert_success", { text: selectedMessage.text });
+        await ctx.editMessageText(truncateText(successText, TELEGRAM_MESSAGE_LIMIT), {
+          reply_markup: undefined,
+        });
+        clearMessagesInteraction("messages_revert_success");
+      } catch (error) {
+        logger.error("[Messages] Error reverting message:", error);
+        await ctx.editMessageText(t("messages.revert_error"), { reply_markup: undefined });
+        clearMessagesInteraction("messages_revert_error");
+      }
+
+      return true;
+    }
+
+    if (data === MESSAGES_CALLBACK_FORK) {
       await ctx.answerCallbackQuery();
       return true;
     }

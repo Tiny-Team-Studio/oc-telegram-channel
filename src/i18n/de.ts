@@ -193,6 +193,8 @@ export const de: I18nDictionary = {
   "messages.button.fork": "🔀 Fork",
   "messages.button.back": "⬅️ Zurück",
   "messages.button.cancel": "❌ Abbrechen",
+  "messages.revert_success": "✅ Zurück zur Nachricht:\n\n{text}",
+  "messages.revert_error": "❌ Nachricht konnte nicht zurückgesetzt werden. Bitte versuche es erneut.",
 
   "attach.project_not_selected":
     "🏗 Projekt ist nicht ausgewählt.\n\nWähle zuerst ein Projekt mit /projects.",

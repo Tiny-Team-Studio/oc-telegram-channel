@@ -166,6 +166,8 @@ export const zh: I18nDictionary = {
   "messages.button.fork": "🔀 Fork",
   "messages.button.back": "⬅️ 返回",
   "messages.button.cancel": "❌ 取消",
+  "messages.revert_success": "✅ 已恢复到消息：\n\n{text}",
+  "messages.revert_error": "❌ 无法恢复消息。请重试。",
 
   "attach.project_not_selected": "🏗 未选择项目。\n\n请先使用 /projects 选择一个项目。",
   "attach.session_not_selected": "💬 未选择会话。\n\n请先使用 /sessions 选择一个会话。",

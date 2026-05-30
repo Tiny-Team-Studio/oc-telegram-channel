@@ -185,6 +185,8 @@ export const ru: I18nDictionary = {
   "messages.button.fork": "🔀 Fork",
   "messages.button.back": "⬅️ Назад",
   "messages.button.cancel": "❌ Отмена",
+  "messages.revert_success": "✅ Откатили до сообщения:\n\n{text}",
+  "messages.revert_error": "❌ Не удалось откатить сообщение. Попробуйте ещё раз.",
 
   "attach.project_not_selected":
     "🏗 Проект не выбран.\n\nСначала выберите проект командой /projects.",
