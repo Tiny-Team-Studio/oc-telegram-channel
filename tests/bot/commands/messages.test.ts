@@ -22,6 +22,10 @@ const mocked = vi.hoisted(() => ({
   sessionMessagesMock: vi.fn(),
   sessionGetMock: vi.fn(),
   sessionRevertMock: vi.fn(),
+  sessionForkMock: vi.fn(),
+  attachToSessionMock: vi.fn(),
+  setCurrentSessionMock: vi.fn(),
+  ingestSessionInfoForCacheMock: vi.fn(),
 }));
 
 vi.mock("../../../src/settings/manager.js", () => ({
@@ -30,6 +34,16 @@ vi.mock("../../../src/settings/manager.js", () => ({
 
 vi.mock("../../../src/session/manager.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
+  setCurrentSession: mocked.setCurrentSessionMock,
+}));
+
+vi.mock("../../../src/attach/service.js", () => ({
+  attachToSession: mocked.attachToSessionMock,
+}));
+
+vi.mock("../../../src/session/cache-manager.js", () => ({
+  ingestSessionInfoForCache: mocked.ingestSessionInfoForCacheMock,
+  __resetSessionDirectoryCacheForTests: vi.fn(),
 }));
 
 vi.mock("../../../src/opencode/client.js", () => ({
@@ -38,6 +52,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
       messages: mocked.sessionMessagesMock,
       get: mocked.sessionGetMock,
       revert: mocked.sessionRevertMock,
+      fork: mocked.sessionForkMock,
     },
   },
 }));
@@ -63,8 +78,20 @@ function createCallbackContext(data: string, messageId: number): Context {
     answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
     editMessageText: vi.fn().mockResolvedValue(undefined),
     deleteMessage: vi.fn().mockResolvedValue(undefined),
+    api: {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 999 }),
+    },
   } as unknown as Context;
 }
+
+const testDeps = {
+  bot: {
+    api: {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 999 }),
+    },
+  },
+  ensureEventSubscription: vi.fn().mockResolvedValue(undefined),
+};
 
 function makeUserMessage(id: string, text: string, created: number) {
   return {
@@ -93,6 +120,10 @@ describe("bot/commands/messages", () => {
     mocked.sessionMessagesMock.mockReset();
     mocked.sessionGetMock.mockReset();
     mocked.sessionRevertMock.mockReset();
+    mocked.sessionForkMock.mockReset();
+    mocked.attachToSessionMock.mockReset();
+    mocked.setCurrentSessionMock.mockReset();
+    mocked.ingestSessionInfoForCacheMock.mockReset();
 
     // Default: session without revert
     mocked.sessionGetMock.mockResolvedValue({
@@ -265,7 +296,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:page:1", 300);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     const [text, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
@@ -295,7 +326,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:select:0", 400);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     const [text, options] = (ctx.editMessageText as ReturnType<typeof vi.fn>).mock.calls[0] as [
@@ -328,7 +359,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:back", 500);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.editMessageText).toHaveBeenCalledWith(
@@ -356,7 +387,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:cancel", 500);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -383,7 +414,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:cancel", 501);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -413,7 +444,7 @@ describe("bot/commands/messages", () => {
     mocked.sessionRevertMock.mockResolvedValue({});
 
     const ctx = createCallbackContext("messages:revert", 600);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
@@ -449,7 +480,7 @@ describe("bot/commands/messages", () => {
     mocked.sessionRevertMock.mockRejectedValue(new Error("API error"));
 
     const ctx = createCallbackContext("messages:revert", 600);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
@@ -481,7 +512,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:revert", 600);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
@@ -492,7 +523,8 @@ describe("bot/commands/messages", () => {
     expect(ctx.editMessageText).not.toHaveBeenCalled();
   });
 
-  it("keeps detail screen unchanged for fork placeholder", async () => {
+  it("handles successful fork", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
     interactionManager.start({
       kind: "custom",
       expectedInput: "callback",
@@ -502,19 +534,110 @@ describe("bot/commands/messages", () => {
         messageId: 600,
         projectDirectory: "D:\\Projects\\Repo",
         sessionId: "session-1",
-        messages: [{ id: "msg-1", text: "text", created: 1000 }],
+        messages,
         page: 0,
         selectedIndex: 0,
       },
     });
 
+    const forkedSession = {
+      id: "session-2",
+      title: "Forked Session",
+      directory: "D:\\Projects\\Repo",
+    };
+    mocked.sessionForkMock.mockResolvedValue({ data: forkedSession, error: null });
+    mocked.attachToSessionMock.mockResolvedValue({
+      busy: false,
+      alreadyAttached: false,
+      restoredQuestion: false,
+      restoredPermissions: 0,
+    });
+    mocked.ingestSessionInfoForCacheMock.mockResolvedValue(undefined);
+
     const ctx = createCallbackContext("messages:fork", 600);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    expect(mocked.sessionForkMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      messageID: "msg-1",
+      directory: "D:\\Projects\\Repo",
+    });
+    expect(mocked.setCurrentSessionMock).toHaveBeenCalledWith({
+      id: "session-2",
+      title: "Forked Session",
+      directory: "D:\\Projects\\Repo",
+    });
+    expect(mocked.attachToSessionMock).toHaveBeenCalled();
+    expect(ctx.editMessageText).toHaveBeenCalledWith(
+      t("messages.fork_success", { text: "test prompt" }),
+      { reply_markup: undefined },
+    );
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("handles fork error", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "detail",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages,
+        page: 0,
+        selectedIndex: 0,
+      },
+    });
+
+    mocked.sessionForkMock.mockRejectedValue(new Error("API error"));
+
+    const ctx = createCallbackContext("messages:fork", 600);
+    const handled = await handleMessagesCallback(ctx, testDeps);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith();
+    expect(mocked.sessionForkMock).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      messageID: "msg-1",
+      directory: "D:\\Projects\\Repo",
+    });
+    expect(ctx.editMessageText).toHaveBeenCalledWith(t("messages.fork_error"), {
+      reply_markup: undefined,
+    });
+    expect(interactionManager.getSnapshot()).toBeNull();
+  });
+
+  it("rejects fork from list stage", async () => {
+    const messages = [{ id: "msg-1", text: "test prompt", created: 1000 }];
+    interactionManager.start({
+      kind: "custom",
+      expectedInput: "callback",
+      metadata: {
+        flow: "messages",
+        stage: "list",
+        messageId: 600,
+        projectDirectory: "D:\\Projects\\Repo",
+        sessionId: "session-1",
+        messages,
+        page: 0,
+      },
+    });
+
+    const ctx = createCallbackContext("messages:fork", 600);
+    const handled = await handleMessagesCallback(ctx, testDeps);
+
+    expect(handled).toBe(true);
+    expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: t("messages.inactive_callback"),
+      show_alert: true,
+    });
+    expect(mocked.sessionForkMock).not.toHaveBeenCalled();
     expect(ctx.editMessageText).not.toHaveBeenCalled();
-    expect(interactionManager.getSnapshot()?.metadata.stage).toBe("detail");
   });
 
   it("handles stale callback as inactive", async () => {
@@ -533,7 +656,7 @@ describe("bot/commands/messages", () => {
     });
 
     const ctx = createCallbackContext("messages:select:0", 999);
-    const handled = await handleMessagesCallback(ctx);
+    const handled = await handleMessagesCallback(ctx, testDeps);
 
     expect(handled).toBe(true);
     expect(ctx.answerCallbackQuery).toHaveBeenCalledWith({

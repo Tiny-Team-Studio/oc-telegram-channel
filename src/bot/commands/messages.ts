@@ -1,12 +1,19 @@
+import type { Bot } from "grammy";
 import { CommandContext, Context, InlineKeyboard } from "grammy";
 import { config } from "../../config.js";
 import type { InteractionState } from "../../interaction/types.js";
 import { interactionManager } from "../../interaction/manager.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentSession } from "../../session/manager.js";
+import { getCurrentSession, setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
+import { clearAllInteractionState } from "../../interaction/cleanup.js";
+import { attachToSession } from "../../attach/service.js";
+import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
+import { safeBackgroundTask } from "../../utils/safe-background-task.js";
+import { renderAssistantFinalPartsSafe } from "../utils/assistant-rendering.js";
+import { sendRenderedBotPart } from "../utils/telegram-text.js";
 
 const MESSAGES_CALLBACK_PREFIX = "messages:";
 const MESSAGES_CALLBACK_SELECT_PREFIX = `${MESSAGES_CALLBACK_PREFIX}select:`;
@@ -17,6 +24,12 @@ const MESSAGES_CALLBACK_BACK = `${MESSAGES_CALLBACK_PREFIX}back`;
 const MESSAGES_CALLBACK_CANCEL = `${MESSAGES_CALLBACK_PREFIX}cancel`;
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
 const TELEGRAM_MESSAGE_LIMIT = 4096;
+const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
+
+export interface MessagesCallbackDeps {
+  bot: Bot<Context>;
+  ensureEventSubscription: (directory: string) => Promise<void>;
+}
 
 interface UserMessageItem {
   id: string;
@@ -345,6 +358,76 @@ async function loadUserMessages(sessionId: string, directory: string): Promise<U
   return messages;
 }
 
+async function loadLatestAssistantResponse(
+  sessionId: string,
+  directory: string,
+): Promise<string | null> {
+  try {
+    const { data: messages, error } = await opencodeClient.session.messages({
+      sessionID: sessionId,
+      directory,
+      limit: LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT,
+    });
+
+    if (error || !messages) {
+      logger.warn("[Messages] Failed to fetch latest assistant response:", error);
+      return null;
+    }
+
+    const latestResponse = (messages as SessionMessageLike[]).reduce<{
+      text: string;
+      created: number;
+    } | null>((latest, message) => {
+      if (message.info.role !== "assistant") {
+        return latest;
+      }
+
+      const assistantInfo = message.info as { summary?: boolean };
+      if (assistantInfo.summary) {
+        return latest;
+      }
+
+      const text = extractTextParts(message.parts);
+      if (!text) {
+        return latest;
+      }
+
+      const created = message.info.time?.created ?? 0;
+      if (!latest || created >= latest.created) {
+        return { text, created };
+      }
+
+      return latest;
+    }, null);
+
+    return latestResponse?.text ?? null;
+  } catch (err) {
+    logger.error("[Messages] Error loading latest assistant response:", err);
+    return null;
+  }
+}
+
+async function sendLatestAssistantResponse(
+  api: Context["api"],
+  chatId: number,
+  sessionId: string,
+  directory: string,
+): Promise<void> {
+  const responseText = await loadLatestAssistantResponse(sessionId, directory);
+  if (!responseText) {
+    return;
+  }
+
+  const parts = renderAssistantFinalPartsSafe(responseText, TELEGRAM_MESSAGE_LIMIT);
+  for (const part of parts) {
+    await sendRenderedBotPart({
+      api,
+      chatId,
+      part,
+    });
+  }
+}
+
 function parseSelectIndex(data: string): number | null {
   if (!data.startsWith(MESSAGES_CALLBACK_SELECT_PREFIX)) {
     return null;
@@ -410,7 +493,10 @@ export async function messagesCommand(ctx: CommandContext<Context>): Promise<voi
   }
 }
 
-export async function handleMessagesCallback(ctx: Context): Promise<boolean> {
+export async function handleMessagesCallback(
+  ctx: Context,
+  deps: MessagesCallbackDeps,
+): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(MESSAGES_CALLBACK_PREFIX)) {
     return false;
@@ -461,7 +547,73 @@ export async function handleMessagesCallback(ctx: Context): Promise<boolean> {
     }
 
     if (data === MESSAGES_CALLBACK_FORK) {
+      if (metadata.stage !== "detail") {
+        await ctx.answerCallbackQuery({ text: t("messages.inactive_callback"), show_alert: true });
+        return true;
+      }
+
+      const selectedMessage = metadata.messages[metadata.selectedIndex];
+      if (!selectedMessage) {
+        await ctx.answerCallbackQuery({ text: t("messages.fetch_error"), show_alert: true });
+        return true;
+      }
+
       await ctx.answerCallbackQuery();
+
+      try {
+        const { data: forkedSession, error: forkError } = await opencodeClient.session.fork({
+          sessionID: metadata.sessionId,
+          messageID: selectedMessage.id,
+          directory: metadata.projectDirectory,
+        });
+
+        if (forkError || !forkedSession) {
+          throw forkError || new Error("No session data received from fork");
+        }
+
+        logger.info(
+          `[Messages] Forked session: id=${forkedSession.id}, title="${forkedSession.title}", from message=${selectedMessage.id}`,
+        );
+
+        const sessionInfo: SessionInfo = {
+          id: forkedSession.id,
+          title: forkedSession.title,
+          directory: metadata.projectDirectory,
+        };
+
+        setCurrentSession(sessionInfo);
+        clearAllInteractionState("session_forked");
+        await ingestSessionInfoForCache(forkedSession);
+
+        await attachToSession({
+          bot: deps.bot,
+          chatId: ctx.chat!.id,
+          session: sessionInfo,
+          ensureEventSubscription: deps.ensureEventSubscription,
+        });
+
+        const successText = t("messages.fork_success", { text: selectedMessage.text });
+        await ctx.editMessageText(truncateText(successText, TELEGRAM_MESSAGE_LIMIT), {
+          reply_markup: undefined,
+        });
+        clearMessagesInteraction("messages_fork_success");
+
+        safeBackgroundTask({
+          taskName: "messages.sendLatestAssistantResponse",
+          task: () =>
+            sendLatestAssistantResponse(
+              ctx.api,
+              ctx.chat!.id,
+              forkedSession.id,
+              metadata.projectDirectory,
+            ),
+        });
+      } catch (error) {
+        logger.error("[Messages] Error forking session:", error);
+        await ctx.editMessageText(t("messages.fork_error"), { reply_markup: undefined });
+        clearMessagesInteraction("messages_fork_error");
+      }
+
       return true;
     }
 

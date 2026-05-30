@@ -167,7 +167,7 @@ Model picker behavior:
 - [x] `/mcps` command: browse available MCP servers
 - [x] Optional local OpenCode server monitoring with automatic restart
 - [x] Interactive project file browsing and file download from Telegram (`/ls`)
-- [x] `/messages` command: browse session messages with fork/revert placeholders
+- [x] `/messages` command: browse session messages with revert and fork functionality
 
 ## Current Task List
 

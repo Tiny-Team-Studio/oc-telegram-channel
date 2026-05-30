@@ -1228,7 +1228,7 @@ export function createBot(): Bot<Context> {
       const handledTaskList = await handleTaskListCallback(ctx);
       const handledRenameCancel = await handleRenameCancel(ctx);
       const handledCommands = await handleCommandsCallback(ctx, { bot, ensureEventSubscription });
-      const handledMessages = await handleMessagesCallback(ctx);
+      const handledMessages = await handleMessagesCallback(ctx, { bot, ensureEventSubscription });
       const handledSkills = await handleSkillsCallback(ctx, { bot, ensureEventSubscription });
       const handledMcps = await handleMcpsCallback(ctx);
 

@@ -187,6 +187,8 @@ export const en = {
   "messages.button.cancel": "❌ Cancel",
   "messages.revert_success": "✅ Reverted to message:\n\n{text}",
   "messages.revert_error": "❌ Failed to revert message. Please try again.",
+  "messages.fork_success": "🔀 Fork created from message:\n\n{text}",
+  "messages.fork_error": "❌ Failed to create fork. Please try again.",
 
   "attach.project_not_selected":
     "🏗 Project is not selected.\n\nFirst select a project with /projects.",

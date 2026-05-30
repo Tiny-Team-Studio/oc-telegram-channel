@@ -194,6 +194,8 @@ export const es: I18nDictionary = {
   "messages.button.cancel": "❌ Cancelar",
   "messages.revert_success": "✅ Revertido al mensaje:\n\n{text}",
   "messages.revert_error": "❌ No se pudo revertir el mensaje. Inténtalo de nuevo.",
+  "messages.fork_success": "🔀 Fork creado desde el mensaje:\n\n{text}",
+  "messages.fork_error": "❌ No se pudo crear el fork. Inténtalo de nuevo.",
 
   "attach.project_not_selected":
     "🏗 No hay un proyecto seleccionado.\n\nPrimero selecciona un proyecto con /projects.",
