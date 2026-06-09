@@ -13,7 +13,7 @@ import {
   ensureActiveInlineMenu,
   replyWithInlineMenu,
 } from "../core/interactions/inline-menu.js";
-import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
+import { isForegroundBusy, replyBusyBlocked } from "../core/assistant-execution/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";

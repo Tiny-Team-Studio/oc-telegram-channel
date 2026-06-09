@@ -13,7 +13,7 @@ import {
   replyWithInlineMenu,
 } from "../core/interactions/inline-menu.js";
 import { switchToProject } from "../utils/switch-project.js";
-import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
+import { isForegroundBusy, replyBusyBlocked } from "../core/assistant-execution/busy-guard.js";
 import { buildProjectButtonLabel, calculateProjectsPaginationRange } from "./projects.js";
 
 const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;

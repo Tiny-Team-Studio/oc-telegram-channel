@@ -9,7 +9,7 @@ const mocked = vi.hoisted(() => ({
   flushDeferredDeliveriesMock: vi.fn(),
 }));
 
-vi.mock("../../../src/opencode/client.js", () => ({
+vi.mock("../../../../src/opencode/client.js", () => ({
   opencodeClient: {
     session: {
       status: mocked.sessionStatusMock,
@@ -17,35 +17,35 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/attach/service.js", () => ({
+vi.mock("../../../../src/attach/service.js", () => ({
   markAttachedSessionBusy: mocked.markAttachedSessionBusyMock,
   markAttachedSessionIdle: mocked.markAttachedSessionIdleMock,
 }));
 
-vi.mock("../../../src/bot/assistant-run-state.js", () => ({
+vi.mock("../../../../src/bot/core/assistant-execution/assistant-run-state.js", () => ({
   assistantRunState: {
     clearRun: mocked.clearRunMock,
   },
 }));
 
-vi.mock("../../../src/bot/handlers/prompt.js", () => ({
+vi.mock("../../../../src/bot/handlers/prompt.js", () => ({
   clearPromptResponseMode: mocked.clearPromptResponseModeMock,
 }));
 
-vi.mock("../../../src/scheduled-task/runtime.js", () => ({
+vi.mock("../../../../src/scheduled-task/runtime.js", () => ({
   scheduledTaskRuntime: {
     flushDeferredDeliveries: mocked.flushDeferredDeliveriesMock,
   },
 }));
 
-import { attachManager } from "../../../src/attach/manager.js";
-import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
+import { attachManager } from "../../../../src/attach/manager.js";
+import { foregroundSessionState } from "../../../../src/scheduled-task/foreground-state.js";
 import {
   __resetBusyReconciliationForTests,
   reconcileBusyState,
   reconcileBusyStateNow,
   setResponseStreamerForReconciliation,
-} from "../../../src/bot/utils/busy-reconciliation.js";
+} from "../../../../src/bot/core/assistant-execution/busy-reconciliation.js";
 
 function markForegroundBusyAt(
   sessionId: string,

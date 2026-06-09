@@ -5,11 +5,11 @@ const mocked = vi.hoisted(() => ({
   loggerWarnMock: vi.fn(),
 }));
 
-vi.mock("../../../src/bot/utils/busy-reconciliation.js", () => ({
+vi.mock("../../../../src/bot/core/assistant-execution/busy-reconciliation.js", () => ({
   reconcileBusyStateNow: mocked.reconcileBusyStateNowMock,
 }));
 
-vi.mock("../../../src/utils/logger.js", () => ({
+vi.mock("../../../../src/utils/logger.js", () => ({
   logger: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -18,11 +18,11 @@ vi.mock("../../../src/utils/logger.js", () => ({
   },
 }));
 
-import { attachManager } from "../../../src/attach/manager.js";
-import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
-import { reconcileForegroundBusyState } from "../../../src/bot/utils/busy-guard.js";
+import { attachManager } from "../../../../src/attach/manager.js";
+import { foregroundSessionState } from "../../../../src/scheduled-task/foreground-state.js";
+import { reconcileForegroundBusyState } from "../../../../src/bot/core/assistant-execution/busy-guard.js";
 
-describe("bot/utils/busy-guard", () => {
+describe("bot/core/assistant-execution/busy-guard", () => {
   beforeEach(() => {
     foregroundSessionState.__resetForTests();
     attachManager.__resetForTests();

@@ -8,7 +8,7 @@ import {
   ensureActiveInlineMenu,
 } from "../core/interactions/inline-menu.js";
 import { interactionManager } from "../core/interactions/active-flow/manager.js";
-import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
+import { isForegroundBusy, replyBusyBlocked } from "../core/assistant-execution/busy-guard.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { sendDownloadedFile } from "../utils/send-downloaded-file.js";
 import { formatFileSize } from "../utils/file-download.js";

@@ -10,7 +10,7 @@ import { clearProject } from "../../settings/manager.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { abortCurrentOperation } from "./abort.js";
 import { t } from "../../i18n/index.js";
-import { assistantRunState } from "../assistant-run-state.js";
+import { assistantRunState } from "../core/assistant-execution/assistant-run-state.js";
 import { detachAttachedSession } from "../../attach/service.js";
 
 export async function startCommand(ctx: Context): Promise<void> {

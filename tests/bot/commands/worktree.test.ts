@@ -33,7 +33,7 @@ vi.mock("../../../src/bot/core/interactions/inline-menu.js", () => ({
   replyWithInlineMenu: mocked.replyWithInlineMenuMock,
 }));
 
-vi.mock("../../../src/bot/utils/busy-guard.js", () => ({
+vi.mock("../../../src/bot/core/assistant-execution/busy-guard.js", () => ({
   isForegroundBusy: mocked.isForegroundBusyMock,
   replyBusyBlocked: mocked.replyBusyBlockedMock,
 }));

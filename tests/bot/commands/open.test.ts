@@ -60,7 +60,7 @@ vi.mock("../../../src/bot/core/interactions/active-flow/manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/bot/utils/busy-guard.js", () => ({
+vi.mock("../../../src/bot/core/assistant-execution/busy-guard.js", () => ({
   isForegroundBusy: mocked.isForegroundBusyMock,
   replyBusyBlocked: mocked.replyBusyBlockedMock,
 }));

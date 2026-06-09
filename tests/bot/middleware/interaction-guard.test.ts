@@ -9,7 +9,7 @@ const mocked = vi.hoisted(() => ({
   reconcileForegroundBusyStateMock: vi.fn(),
 }));
 
-vi.mock("../../../src/bot/utils/busy-guard.js", () => ({
+vi.mock("../../../src/bot/core/assistant-execution/busy-guard.js", () => ({
   reconcileForegroundBusyState: mocked.reconcileForegroundBusyStateMock,
 }));
 

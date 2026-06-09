@@ -1,9 +1,9 @@
 import type { Context } from "grammy";
-import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
-import { attachManager } from "../../attach/manager.js";
+import { foregroundSessionState } from "../../../scheduled-task/foreground-state.js";
+import { attachManager } from "../../../attach/manager.js";
 import { reconcileBusyStateNow } from "./busy-reconciliation.js";
-import { t } from "../../i18n/index.js";
-import { logger } from "../../utils/logger.js";
+import { t } from "../../../i18n/index.js";
+import { logger } from "../../../utils/logger.js";
 
 export function isForegroundBusy(): boolean {
   return foregroundSessionState.isBusy() || attachManager.isBusy();

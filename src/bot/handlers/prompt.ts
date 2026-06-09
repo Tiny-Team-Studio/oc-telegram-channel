@@ -19,7 +19,7 @@ import { formatErrorDetails } from "../../utils/error-format.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
-import { assistantRunState } from "../assistant-run-state.js";
+import { assistantRunState } from "../core/assistant-execution/assistant-run-state.js";
 import {
   attachToSession,
   detachAttachedSession,

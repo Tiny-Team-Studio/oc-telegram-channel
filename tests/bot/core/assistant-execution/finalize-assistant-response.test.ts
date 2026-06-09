@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { finalizeAssistantResponse } from "../../../src/bot/utils/finalize-assistant-response.js";
+import { finalizeAssistantResponse } from "../../../../src/bot/core/assistant-execution/finalize-assistant-response.js";
 
-describe("bot/utils/finalize-assistant-response", () => {
+describe("bot/core/assistant-execution/finalize-assistant-response", () => {
   it("completes the response stream and sends final text when streamer reports not streamed", async () => {
     const responseStreamer = {
       complete: vi.fn().mockResolvedValue({ streamed: false, telegramMessageIds: [] }),

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-describe("bot/utils/finalize-assistant-response logging", () => {
+describe("bot/core/assistant-execution/finalize-assistant-response logging", () => {
   it("logs final assistant raw text exactly once per finalize call", async () => {
     vi.resetModules();
 
     const debug = vi.fn();
-    vi.doMock("../../../src/utils/logger.js", () => ({
+    vi.doMock("../../../../src/utils/logger.js", () => ({
       logger: {
         debug,
         info: vi.fn(),
@@ -15,7 +15,7 @@ describe("bot/utils/finalize-assistant-response logging", () => {
     }));
 
     const { finalizeAssistantResponse } =
-      await import("../../../src/bot/utils/finalize-assistant-response.js");
+      await import("../../../../src/bot/core/assistant-execution/finalize-assistant-response.js");
 
     await finalizeAssistantResponse({
       sessionId: "s1",

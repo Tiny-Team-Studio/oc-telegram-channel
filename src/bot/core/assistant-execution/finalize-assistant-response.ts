@@ -1,6 +1,6 @@
-import type { StreamingMessagePayload, ResponseStreamer } from "../ui/streaming/response-streamer.js";
-import { logger } from "../../utils/logger.js";
-import type { TelegramRenderedPart } from "../ui/render/types.js";
+import type { StreamingMessagePayload, ResponseStreamer } from "../../ui/streaming/response-streamer.js";
+import { logger } from "../../../utils/logger.js";
+import type { TelegramRenderedPart } from "../../ui/render/types.js";
 
 interface FinalizeAssistantResponseOptions {
   sessionId: string;

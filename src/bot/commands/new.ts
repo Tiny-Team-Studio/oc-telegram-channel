@@ -10,7 +10,7 @@ import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
 import { getStoredModel } from "../../model/manager.js";
 import { formatVariantForButton } from "../../variant/manager.js";
 import { createMainKeyboard } from "../ui/keyboard/keyboard.js";
-import { isForegroundBusy, replyBusyBlocked } from "../utils/busy-guard.js";
+import { isForegroundBusy, replyBusyBlocked } from "../core/assistant-execution/busy-guard.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { attachToSession } from "../../attach/service.js";
