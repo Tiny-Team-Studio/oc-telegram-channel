@@ -80,7 +80,7 @@ vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   resolveProjectAgent: mocked.resolveProjectAgentMock,
 }));
 

@@ -1,50 +1,10 @@
-import { Context, InlineKeyboard } from "grammy";
-import { getCurrentSession } from "../../session/manager.js";
+import { Context } from "grammy";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getStoredModel } from "../../model/manager.js";
-import {
-  clearActiveInlineMenu,
-  ensureActiveInlineMenu,
-  replyWithInlineMenu,
-} from "../menus/inline-menu.js";
+import { getCurrentSession } from "../../session/manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-
-/**
- * Build inline keyboard with compact confirmation menu
- * @returns InlineKeyboard with confirmation button
- */
-export function buildCompactConfirmationMenu(): InlineKeyboard {
-  const keyboard = new InlineKeyboard();
-
-  keyboard.text(t("context.button.confirm"), "compact:confirm");
-
-  return keyboard;
-}
-
-/**
- * Handle context button press (text message from Reply Keyboard)
- * Shows inline menu with compact confirmation
- * @param ctx grammY context
- */
-export async function handleContextButtonPress(ctx: Context): Promise<void> {
-  logger.debug("[ContextHandler] Context button pressed");
-
-  const session = getCurrentSession();
-
-  if (!session) {
-    await ctx.reply(t("context.no_active_session"));
-    return;
-  }
-
-  const keyboard = buildCompactConfirmationMenu();
-
-  await replyWithInlineMenu(ctx, {
-    menuKind: "context",
-    text: t("context.confirm_text", { title: session.title }),
-    keyboard,
-  });
-}
+import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 
 /**
  * Handle compact confirmation callback

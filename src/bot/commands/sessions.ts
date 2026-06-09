@@ -2,7 +2,7 @@ import type { Bot } from "grammy";
 import { CommandContext, Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
-import { resolveProjectAgent } from "../../agent/manager.js";
+import { resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import { setCurrentSession, SessionInfo } from "../../session/manager.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";

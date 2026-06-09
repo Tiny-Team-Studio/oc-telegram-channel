@@ -1,4 +1,4 @@
-import { getAgentDisplayName } from "../../agent/types.js";
+import { getAgentDisplayName } from "../types/agent.js";
 
 interface AssistantRunFooterParams {
   agent: string;

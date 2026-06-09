@@ -38,11 +38,11 @@ vi.mock("../../../src/settings/manager.js", () => ({
   isTtsEnabled: mocked.isTtsEnabledMock,
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   fetchCurrentAgent: mocked.fetchCurrentAgentMock,
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   fetchCurrentModel: mocked.fetchCurrentModelMock,
 }));
 

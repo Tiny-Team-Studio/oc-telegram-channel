@@ -9,8 +9,8 @@ import {
   setPinnedMessageId,
   clearPinnedMessageId,
 } from "../../settings/manager.js";
-import { getStoredModel } from "../../model/manager.js";
-import { getModelContextLimit } from "../../model/context-limit.js";
+import { getModelContextLimit } from "../../app/services/model-context-limit-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { isExpectedOpencodeUnavailableError } from "../../utils/opencode-error.js";
 import type { FileChange, PinnedMessageState, TokensInfo } from "./pinned-message-types.js";
 import { t } from "../../i18n/index.js";

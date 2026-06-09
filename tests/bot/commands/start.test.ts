@@ -44,15 +44,15 @@ vi.mock("../../../src/bot/keyboards/main-reply-keyboard.js", () => ({
   createMainKeyboard: mocked.createMainKeyboardMock,
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: mocked.getStoredAgentMock,
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: mocked.getStoredModelMock,
 }));
 
-vi.mock("../../../src/variant/manager.js", () => ({
+vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
   formatVariantForButton: mocked.formatVariantForButtonMock,
 }));
 

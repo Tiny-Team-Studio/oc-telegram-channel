@@ -79,7 +79,7 @@ vi.mock("../../src/utils/logger.js", () => ({
   },
 }));
 
-import { fetchCurrentAgent, getAvailableAgents, resolveProjectAgent } from "../../src/agent/manager.js";
+import { fetchCurrentAgent, getAvailableAgents, resolveProjectAgent } from "../../src/app/services/agent-selection-service.js";
 
 function createAgentResponse(
   agents: Array<{ name: string; mode: "primary" | "all" | "subagent"; hidden?: boolean }>,

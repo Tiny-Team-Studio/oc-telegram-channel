@@ -1,4 +1,4 @@
-import { reconcileStoredModelSelection } from "../model/manager.js";
+import { reconcileStoredModelSelection } from "../app/services/model-selection-service.js";
 import { warmupSessionDirectoryCache } from "../session/cache-manager.js";
 import { logger } from "../utils/logger.js";
 import { opencodeClient } from "./client.js";

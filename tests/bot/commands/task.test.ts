@@ -72,7 +72,7 @@ vi.mock("../../../src/settings/manager.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: vi.fn(() => mocked.storedModel),
 }));
 

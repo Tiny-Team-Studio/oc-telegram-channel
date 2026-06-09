@@ -57,16 +57,16 @@ vi.mock("../../../src/bot/keyboards/keyboard-manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: vi.fn(() => "build"),
   resolveProjectAgent: vi.fn(async (agentName?: string) => agentName ?? "build"),
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: vi.fn(() => ({ providerID: "openai", modelID: "gpt-5", variant: "default" })),
 }));
 
-vi.mock("../../../src/variant/manager.js", () => ({
+vi.mock("../../../src/app/services/variant-selection-service.js", () => ({
   formatVariantForButton: vi.fn(() => "Default"),
 }));
 

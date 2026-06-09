@@ -62,7 +62,7 @@ vi.mock("../../src/scheduled-task/runtime.js", () => ({
   },
 }));
 
-vi.mock("../../src/model/manager.js", () => ({
+vi.mock("../../src/app/services/model-selection-service.js", () => ({
   reconcileStoredModelSelection: mocked.reconcileStoredModelSelectionMock,
 }));
 

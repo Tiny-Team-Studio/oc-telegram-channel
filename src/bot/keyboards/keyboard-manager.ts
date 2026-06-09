@@ -1,9 +1,9 @@
 import type { Api } from "grammy";
 import { createMainKeyboard } from "./main-reply-keyboard.js";
-import type { ModelInfo } from "../../model/types.js";
-import { getStoredAgent } from "../../agent/manager.js";
-import { getStoredModel } from "../../model/manager.js";
-import { formatVariantForButton } from "../../variant/manager.js";
+import { getStoredAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
+import type { ModelInfo } from "../../app/types/model.js";
 import { logger } from "../../utils/logger.js";
 import type { ContextInfo, KeyboardState } from "./keyboard-types.js";
 import { t } from "../../i18n/index.js";

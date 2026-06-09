@@ -1,8 +1,8 @@
 import { Context } from "grammy";
 import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import { getStoredAgent } from "../../agent/manager.js";
-import { getStoredModel } from "../../model/manager.js";
-import { formatVariantForButton } from "../../variant/manager.js";
+import { getStoredAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
+import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { clearSession } from "../../session/manager.js";

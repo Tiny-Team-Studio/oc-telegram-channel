@@ -11,7 +11,7 @@ const mocked = vi.hoisted(() => ({
   ensureActiveInlineMenuMock: vi.fn(),
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getModelSelectionLists: mocked.getModelSelectionListsMock,
   searchModels: mocked.searchModelsMock,
   selectModel: vi.fn(),
@@ -35,10 +35,13 @@ vi.mock("../../../src/bot/menus/inline-menu.js", () => ({
 
 import {
   buildModelSelectionMenu,
+} from "../../../src/bot/menus/model-selection-menu.js";
+
+import {
   handleModelSearchCallback,
   handleModelSearchTextInput,
   handleModelSearchResults,
-} from "../../../src/bot/handlers/model.js";
+} from "../../../src/bot/callbacks/model-selection-callback-handler.js";
 
 function mockContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -52,7 +55,7 @@ function mockContext(overrides: Record<string, unknown> = {}) {
   } as unknown as import("grammy").Context;
 }
 
-describe("bot/handlers/model", () => {
+describe("bot model selection", () => {
   beforeEach(() => {
     mocked.getModelSelectionListsMock.mockReset();
     mocked.searchModelsMock.mockReset();

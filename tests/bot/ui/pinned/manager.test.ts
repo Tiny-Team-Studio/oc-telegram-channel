@@ -26,8 +26,8 @@ vi.mock("../../../../src/settings/manager.js", () => ({
   setPinnedMessageId: mocked.setPinnedMessageId,
   clearPinnedMessageId: mocked.clearPinnedMessageId,
 }));
-vi.mock("../../../../src/model/manager.js", () => ({ getStoredModel: mocked.getStoredModel }));
-vi.mock("../../../../src/model/context-limit.js", () => ({
+vi.mock("../../../../src/app/services/model-selection-service.js", () => ({ getStoredModel: mocked.getStoredModel }));
+vi.mock("../../../../src/app/services/model-context-limit-service.js", () => ({
   getModelContextLimit: mocked.getModelContextLimit,
 }));
 vi.mock("../../../../src/i18n/index.js", async (importOriginal) => {

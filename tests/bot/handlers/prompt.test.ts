@@ -47,12 +47,12 @@ vi.mock("../../../src/settings/manager.js", () => ({
   isTtsEnabled: vi.fn(() => false),
 }));
 
-vi.mock("../../../src/agent/manager.js", () => ({
+vi.mock("../../../src/app/services/agent-selection-service.js", () => ({
   getStoredAgent: vi.fn(() => "build"),
   resolveProjectAgent: vi.fn(async (agentName?: string) => agentName ?? "build"),
 }));
 
-vi.mock("../../../src/model/manager.js", () => ({
+vi.mock("../../../src/app/services/model-selection-service.js", () => ({
   getStoredModel: vi.fn(() => ({
     providerID: "openai",
     modelID: "gpt-5",

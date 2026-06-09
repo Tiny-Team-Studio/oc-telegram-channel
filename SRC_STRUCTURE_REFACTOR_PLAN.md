@@ -375,7 +375,7 @@ src/bot/
   6. Обновить imports в prompt/abort/detach/scheduled tasks/tests.
   7. Запустить busy/finalize/streaming/prompt/abort тесты, затем build.
 
-- [ ] **Этап 9. Assistant controls: model/agent/variant/context**
+- [x] **Этап 9. Assistant controls: model/agent/variant/context**
 
   1. Перенести `src/model/manager.ts` -> `app/services/model-selection-service.ts`.
   2. Перенести `src/model/capabilities.ts` -> `app/services/model-capabilities-service.ts`.

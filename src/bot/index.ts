@@ -50,16 +50,19 @@ import { showCurrentQuestion } from "./menus/question-menu.js";
 import { handleQuestionCallback, handleQuestionTextAnswer } from "./callbacks/question-callback-handler.js";
 import { showPermissionRequest } from "./menus/permission-menu.js";
 import { handlePermissionCallback } from "./callbacks/permission-callback-handler.js";
-import { handleAgentSelect, showAgentSelectionMenu } from "./handlers/agent.js";
+import { handleAgentSelect } from "./callbacks/agent-selection-callback-handler.js";
+import { showAgentSelectionMenu } from "./menus/agent-selection-menu.js";
 import {
   handleModelSelect,
   handleModelSearchCallback,
   handleModelSearchResults,
   handleModelSearchTextInput,
-  showModelSelectionMenu,
-} from "./handlers/model.js";
-import { handleVariantSelect, showVariantSelectionMenu } from "./handlers/variant.js";
-import { handleContextButtonPress, handleCompactConfirm } from "./handlers/context.js";
+} from "./callbacks/model-selection-callback-handler.js";
+import { showModelSelectionMenu } from "./menus/model-selection-menu.js";
+import { handleVariantSelect } from "./callbacks/variant-selection-callback-handler.js";
+import { showVariantSelectionMenu } from "./menus/variant-selection-menu.js";
+import { handleContextButtonPress } from "./menus/context-control-menu.js";
+import { handleCompactConfirm } from "./callbacks/context-control-callback-handler.js";
 import { handleInlineMenuCancel } from "./callbacks/inline-menu-cancel-callback-handler.js";
 import { questionManager } from "../app/managers/question-manager.js";
 import { interactionManager } from "../app/managers/interaction-manager.js";
@@ -103,8 +106,8 @@ import {
   sendRenderedBotPart,
 } from "./ui/telegram-text.js";
 import { formatAssistantRunFooter } from "../app/formatters/assistant-run-footer-formatter.js";
-import { getModelCapabilities, supportsInput } from "../model/capabilities.js";
-import { getStoredModel } from "../model/manager.js";
+import { getModelCapabilities, supportsInput } from "../app/services/model-capabilities-service.js";
+import { getStoredModel } from "../app/services/model-selection-service.js";
 import type { FilePartInput } from "@opencode-ai/sdk/v2";
 import { foregroundSessionState } from "../scheduled-task/foreground-state.js";
 import { scheduledTaskRuntime } from "../scheduled-task/runtime.js";

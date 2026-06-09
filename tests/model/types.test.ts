@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatModelForButton, formatModelForDisplay } from "../../src/model/types.js";
+import { formatModelForButton, formatModelForDisplay } from "../../src/app/types/model.js";
 
 describe("model/types", () => {
   it("formats model for button without truncation", () => {

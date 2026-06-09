@@ -4,7 +4,7 @@ import { config } from "../../config.js";
 import { getDateLocale, t } from "../../i18n/index.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
-import { getStoredModel } from "../../model/manager.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { taskCreationManager } from "../../scheduled-task/creation-manager.js";
 import { parseTaskSchedule } from "../../scheduled-task/schedule-parser.js";

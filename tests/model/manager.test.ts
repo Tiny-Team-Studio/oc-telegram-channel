@@ -89,7 +89,7 @@ import {
   getModelSelectionLists,
   reconcileStoredModelSelection,
   searchModels,
-} from "../../src/model/manager.js";
+} from "../../src/app/services/model-selection-service.js";
 
 function createProvidersResponse(modelsByProvider: Record<string, string[]>) {
   return {

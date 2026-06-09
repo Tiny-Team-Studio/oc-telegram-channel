@@ -1,8 +1,8 @@
-import { getCurrentModel, setCurrentModel } from "../settings/manager.js";
-import { config } from "../config.js";
-import { opencodeClient } from "../opencode/client.js";
-import { logger } from "../utils/logger.js";
-import type { ModelInfo, FavoriteModel, ModelSelectionLists } from "./types.js";
+import { getCurrentModel, setCurrentModel } from "../../settings/manager.js";
+import { config } from "../../config.js";
+import { opencodeClient } from "../../opencode/client.js";
+import { logger } from "../../utils/logger.js";
+import type { ModelInfo, FavoriteModel, ModelSelectionLists } from "../types/model.js";
 import path from "node:path";
 
 interface OpenCodeModelState {

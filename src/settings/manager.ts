@@ -1,4 +1,4 @@
-import type { ModelInfo } from "../model/types.js";
+import type { ModelInfo } from "../app/types/model.js";
 import { cloneScheduledTask, type ScheduledTask } from "../scheduled-task/types.js";
 import path from "node:path";
 import { getRuntimePaths } from "../runtime/paths.js";

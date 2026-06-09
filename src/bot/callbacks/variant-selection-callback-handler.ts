@@ -1,23 +1,17 @@
-import { Context, InlineKeyboard } from "grammy";
+import { Context } from "grammy";
+import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
+import { getStoredModel } from "../../app/services/model-selection-service.js";
 import {
-  getAvailableVariants,
-  getCurrentVariant,
-  setCurrentVariant,
-  formatVariantForDisplay,
   formatVariantForButton,
-} from "../../variant/manager.js";
-import { getStoredModel } from "../../model/manager.js";
-import { getStoredAgent, resolveProjectAgent } from "../../agent/manager.js";
+  formatVariantForDisplay,
+  setCurrentVariant,
+} from "../../app/services/variant-selection-service.js";
 import { logger } from "../../utils/logger.js";
+import { t } from "../../i18n/index.js";
+import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
-import { createMainKeyboard } from "../keyboards/main-reply-keyboard.js";
-import {
-  clearActiveInlineMenu,
-  ensureActiveInlineMenu,
-  replyWithInlineMenu,
-} from "../menus/inline-menu.js";
-import { t } from "../../i18n/index.js";
+import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 
 /**
  * Handle variant selection callback
@@ -110,86 +104,5 @@ export async function handleVariantSelect(ctx: Context): Promise<boolean> {
     logger.error("[VariantHandler] Error handling variant select:", err);
     await ctx.answerCallbackQuery({ text: t("variant.change_error_callback") }).catch(() => {});
     return false;
-  }
-}
-
-/**
- * Build inline keyboard with available variants
- * @param currentVariant Current variant for highlighting
- * @param providerID Provider ID
- * @param modelID Model ID
- * @returns InlineKeyboard with variant selection buttons
- */
-export async function buildVariantSelectionMenu(
-  currentVariant: string,
-  providerID: string,
-  modelID: string,
-): Promise<InlineKeyboard> {
-  const keyboard = new InlineKeyboard();
-  const variants = await getAvailableVariants(providerID, modelID);
-
-  if (variants.length === 0) {
-    logger.warn("[VariantHandler] No variants found");
-    return keyboard;
-  }
-
-  // Filter only active variants (not disabled)
-  const activeVariants = variants.filter((v) => !v.disabled);
-
-  if (activeVariants.length === 0) {
-    logger.warn("[VariantHandler] No active variants found");
-    // If no active variants, show default at least
-    keyboard.text(`✅ ${formatVariantForDisplay("default")}`, "variant:default").row();
-    return keyboard;
-  }
-
-  // Add button for each variant (one per row)
-  activeVariants.forEach((variant) => {
-    const isActive = variant.id === currentVariant;
-    const label = formatVariantForDisplay(variant.id);
-    const labelWithCheck = isActive ? `✅ ${label}` : label;
-
-    keyboard.text(labelWithCheck, `variant:${variant.id}`).row();
-  });
-
-  return keyboard;
-}
-
-/**
- * Show variant selection menu
- * @param ctx grammY context
- */
-export async function showVariantSelectionMenu(ctx: Context): Promise<void> {
-  try {
-    const currentModel = getStoredModel();
-
-    if (!currentModel.providerID || !currentModel.modelID) {
-      await ctx.reply(t("variant.select_model_first"));
-      return;
-    }
-
-    const currentVariant = getCurrentVariant();
-    const keyboard = await buildVariantSelectionMenu(
-      currentVariant,
-      currentModel.providerID,
-      currentModel.modelID,
-    );
-
-    if (keyboard.inline_keyboard.length === 0) {
-      await ctx.reply(t("variant.menu.empty"));
-      return;
-    }
-
-    const displayName = formatVariantForDisplay(currentVariant);
-    const text = t("variant.menu.current", { name: displayName });
-
-    await replyWithInlineMenu(ctx, {
-      menuKind: "variant",
-      text,
-      keyboard,
-    });
-  } catch (err) {
-    logger.error("[VariantHandler] Error showing variant menu:", err);
-    await ctx.reply(t("variant.menu.error"));
   }
 }
