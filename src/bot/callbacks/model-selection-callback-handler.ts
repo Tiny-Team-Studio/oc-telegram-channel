@@ -1,7 +1,6 @@
 import { Context, InlineKeyboard } from "grammy";
 import { getStoredAgent, resolveProjectAgent } from "../../app/services/agent-selection-service.js";
 import {
-  getStoredModel,
   searchModels,
   selectModel,
 } from "../../app/services/model-selection-service.js";

@@ -5,7 +5,7 @@ import { resolveLocalOpencodeTarget, startLocalOpencodeServer } from "../../open
 import { opencodeReadyLifecycle } from "../../opencode/ready-lifecycle.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { editBotText } from "../ui/telegram-text.js";
+import { editBotText } from "../render/telegram-text.js";
 
 const SERVER_READY_TIMEOUT_MS = 10_000;
 const SERVER_READY_POLL_INTERVAL_MS = 500;

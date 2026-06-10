@@ -4,7 +4,7 @@ import {
   editMessageWithMarkdownFallback,
   sendMessageWithMarkdownFallback,
 } from "./send-with-markdown-fallback.js";
-import type { TelegramRenderedPart } from "../render/types.js";
+import type { TelegramRenderedPart } from "./types.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 type EditMessageApi = Pick<Api<RawApi>, "editMessageText">;

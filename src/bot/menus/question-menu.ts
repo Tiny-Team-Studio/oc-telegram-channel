@@ -8,7 +8,7 @@ import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { t } from "../../i18n/index.js";
-import { editRenderedBotPart, sendRenderedBotPart } from "../ui/telegram-text.js";
+import { editRenderedBotPart, sendRenderedBotPart } from "../render/telegram-text.js";
 import type { TelegramRenderedPart } from "../render/types.js";
 import type { MessageEntity } from "grammy/types";
 

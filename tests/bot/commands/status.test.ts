@@ -68,7 +68,7 @@ vi.mock("../../../src/bot/pinned/pinned-message-manager.js", () => ({
   },
 }));
 
-vi.mock("../../../src/bot/ui/telegram-text.js", () => ({
+vi.mock("../../../src/bot/render/telegram-text.js", () => ({
   sendBotText: mocked.sendBotTextMock,
 }));
 

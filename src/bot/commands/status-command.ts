@@ -10,7 +10,7 @@ import { keyboardManager } from "../keyboards/keyboard-manager.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import { sendBotText } from "../ui/telegram-text.js";
+import { sendBotText } from "../render/telegram-text.js";
 
 export async function statusCommand(ctx: CommandContext<Context>) {
   try {

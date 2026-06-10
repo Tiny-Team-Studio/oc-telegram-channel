@@ -3,7 +3,7 @@ import {
   editMessageWithMarkdownFallback,
   isTelegramMarkdownParseError,
   sendMessageWithMarkdownFallback,
-} from "../../../src/bot/ui/send-with-markdown-fallback.js";
+} from "../../../src/bot/render/send-with-markdown-fallback.js";
 
 describe("bot/utils/send-with-markdown-fallback", () => {
   it("sends with MarkdownV2 when there is no parse error", async () => {

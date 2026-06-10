@@ -1,7 +1,7 @@
 import type { Api, RawApi } from "grammy";
 import { t } from "../../i18n/index.js";
 import { escapePlainTextForTelegramMarkdownV2 } from "../../bot/render/summary-message-formatter.js";
-import { sendBotText } from "../../bot/ui/telegram-text.js";
+import { sendBotText } from "../../bot/render/telegram-text.js";
 
 type SendMessageApi = Pick<Api<RawApi>, "sendMessage">;
 

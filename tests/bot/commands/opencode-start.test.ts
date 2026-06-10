@@ -37,7 +37,7 @@ vi.mock("../../../src/opencode/process.js", () => ({
   startLocalOpencodeServer: mocked.startLocalOpencodeServerMock,
 }));
 
-vi.mock("../../../src/bot/ui/telegram-text.js", () => ({
+vi.mock("../../../src/bot/render/telegram-text.js", () => ({
   editBotText: mocked.editBotTextMock,
 }));
 

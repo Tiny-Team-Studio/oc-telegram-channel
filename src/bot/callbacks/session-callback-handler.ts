@@ -15,7 +15,7 @@ import { config } from "../../config.js";
 import { t } from "../../i18n/index.js";
 import { attachToSession } from "../../app/services/attach-service.js";
 import { renderAssistantFinalPartsSafe } from "../render/assistant-rendering.js";
-import { sendRenderedBotPart } from "../ui/telegram-text.js";
+import { sendRenderedBotPart } from "../render/telegram-text.js";
 import {
   buildSessionSelectionMenuView,
   parseBackgroundSessionCallback,

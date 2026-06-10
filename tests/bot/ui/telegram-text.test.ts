@@ -5,7 +5,7 @@ import {
   getTelegramRenderedPartSignature,
   sendBotText,
   sendRenderedBotPart,
-} from "../../../src/bot/ui/telegram-text.js";
+} from "../../../src/bot/render/telegram-text.js";
 
 describe("bot/utils/telegram-text", () => {
   it("sends raw messages by default", async () => {

@@ -15,7 +15,7 @@ import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { renderAssistantFinalPartsSafe } from "../render/assistant-rendering.js";
 import { replyBusyBlocked } from "../render/busy-blocked-renderer.js";
-import { sendRenderedBotPart } from "../ui/telegram-text.js";
+import { sendRenderedBotPart } from "../render/telegram-text.js";
 import {
   buildMessageDetailKeyboard,
   buildMessagesListKeyboard,

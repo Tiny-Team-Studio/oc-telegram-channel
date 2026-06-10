@@ -511,7 +511,7 @@ src/bot/
   4. Обновить SSE/event delivery imports.
   5. Запустить summary/render/streaming тесты, затем build.
 
-- [ ] **Этап 23. Декомпозиция `bot/index.ts`**
+- [x] **Этап 23. Декомпозиция `bot/index.ts`**
 
   1. Выделить command router/registration в `bot/routers/command-router.ts` или command registration module.
   2. Выделить callback router в `bot/callbacks/callback-router.ts`.

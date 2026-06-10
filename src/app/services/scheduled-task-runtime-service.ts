@@ -7,7 +7,7 @@ import {
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
-import { sendBotText } from "../../bot/ui/telegram-text.js";
+import { sendBotText } from "../../bot/render/telegram-text.js";
 import { formatAssistantRunFooter } from "../formatters/assistant-run-footer-formatter.js";
 import { executeScheduledTask, SCHEDULED_TASK_AGENT } from "./scheduled-task-executor-service.js";
 import { foregroundSessionState } from "../managers/foreground-session-state-manager.js";
