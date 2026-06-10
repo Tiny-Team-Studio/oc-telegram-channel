@@ -469,7 +469,7 @@ src/bot/
   9. Обновить взаимодействие с sessions/interactions/run-control.
   10. Запустить scheduled-task/task/tasklist тесты, затем build.
 
-- [ ] **Этап 18. OpenCode server commands**
+- [x] **Этап 18. OpenCode server commands**
 
   1. Перенести `bot/commands/opencode-start.ts`, `opencode-stop.ts` -> `bot/commands/opencode-start-command.ts`, `opencode-stop-command.ts`.
   2. Оставить `opencode/process.ts`, `opencode/auto-restart.ts`, `opencode/ready-*` в `opencode/` как gateway/lifecycle слой.
