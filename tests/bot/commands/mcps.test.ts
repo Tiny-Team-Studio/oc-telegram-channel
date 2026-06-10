@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Context } from "grammy";
-import { mcpsCommand, handleMcpsCallback } from "../../../src/bot/commands/mcps.js";
+import { mcpsCommand } from "../../../src/bot/commands/mcp-catalog-command.js";
+import { handleMcpsCallback } from "../../../src/bot/callbacks/mcp-catalog-callback-handler.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 

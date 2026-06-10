@@ -485,7 +485,7 @@ src/bot/
   4. Обновить registration в `bot/index.ts`.
   5. Запустить start/help/status/command definitions tests, затем build.
 
-- [ ] **Этап 20. Catalogs: commands, skills, MCP**
+- [x] **Этап 20. Catalogs: commands, skills, MCP**
 
   1. Перенести `bot/commands/commands.ts` -> `bot/commands/command-catalog-command.ts`.
   2. Перенести `bot/commands/skills.ts` -> `bot/commands/skills-catalog-command.ts`.

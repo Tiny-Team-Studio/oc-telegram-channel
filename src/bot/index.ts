@@ -40,19 +40,14 @@ import {
   handleTaskCallback,
   handleTaskListCallback,
 } from "./callbacks/scheduled-task-callback-handler.js";
-import {
-  commandsCommand,
-  handleCommandsCallback,
-  handleCommandTextArguments,
-} from "./commands/commands.js";
+import { commandsCommand } from "./commands/command-catalog-command.js";
+import { handleCommandsCallback } from "./callbacks/command-catalog-callback-handler.js";
 import { messagesCommand } from "./commands/messages-command.js";
 import { handleMessagesCallback } from "./callbacks/message-history-callback-handler.js";
-import {
-  skillsCommand,
-  handleSkillsCallback,
-  handleSkillTextArguments,
-} from "./commands/skills.js";
-import { mcpsCommand, handleMcpsCallback } from "./commands/mcps.js";
+import { skillsCommand } from "./commands/skills-catalog-command.js";
+import { handleSkillsCallback } from "./callbacks/skills-catalog-callback-handler.js";
+import { mcpsCommand } from "./commands/mcp-catalog-command.js";
+import { handleMcpsCallback } from "./callbacks/mcp-catalog-callback-handler.js";
 import { ttsCommand } from "./commands/tts-command.js";
 import { showCurrentQuestion } from "./menus/question-menu.js";
 import { handleQuestionCallback, handleQuestionTextAnswer } from "./callbacks/question-callback-handler.js";
@@ -97,6 +92,7 @@ import { handleVoiceMessage } from "./handlers/voice-handler.js";
 import { handleDocumentMessage } from "./handlers/document-handler.js";
 import { createMediaGroupAttachmentMiddleware } from "./handlers/media-group-handler.js";
 import { handlePhotoMessage } from "./handlers/photo-handler.js";
+import { handleCatalogTextArguments } from "./handlers/text-message-handler.js";
 import {
   reconcileBusyState,
   setPromptResponseModeClearerForReconciliation,
@@ -1509,13 +1505,8 @@ export function createBot(): Bot<Context> {
     }
 
     const promptDeps = { bot, ensureEventSubscription };
-    const handledCommandArgs = await handleCommandTextArguments(ctx, promptDeps);
-    if (handledCommandArgs) {
-      return;
-    }
-
-    const handledSkillArgs = await handleSkillTextArguments(ctx, promptDeps);
-    if (handledSkillArgs) {
+    const handledCatalogTextArgs = await handleCatalogTextArguments(ctx, promptDeps);
+    if (handledCatalogTextArgs) {
       return;
     }
 

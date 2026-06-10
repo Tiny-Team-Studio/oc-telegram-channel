@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
+import { commandsCommand } from "../../../src/bot/commands/command-catalog-command.js";
 import {
-  commandsCommand,
-  handleCommandTextArguments,
   handleCommandsCallback,
   type ExecuteCommandDeps,
-  parseCommandPageCallback,
-  formatCommandsSelectText,
+} from "../../../src/bot/callbacks/command-catalog-callback-handler.js";
+import { handleCommandTextArguments } from "../../../src/bot/handlers/text-message-handler.js";
+import {
   calculateCommandsPaginationRange,
-} from "../../../src/bot/commands/commands.js";
+  formatCommandsSelectText,
+  parseCommandPageCallback,
+} from "../../../src/bot/menus/command-catalog-menu.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { t } from "../../../src/i18n/index.js";
 import { foregroundSessionState } from "../../../src/app/managers/foreground-session-state-manager.js";

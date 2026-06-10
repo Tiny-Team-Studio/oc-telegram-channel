@@ -1,6 +1,6 @@
-import { Bot, CommandContext, Context, InlineKeyboard } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import type { Bot, Context } from "grammy";
+import { config } from "../../config.js";
+import type { CommandCatalogItem } from "../../app/services/command-catalog-service.js";
 import {
   clearSession,
   getCurrentSession,
@@ -17,7 +17,6 @@ import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { foregroundSessionState } from "../../app/managers/foreground-session-state-manager.js";
-import { config } from "../../config.js";
 import { assistantRunState } from "../../app/managers/assistant-run-state-manager.js";
 import {
   attachToSession,
@@ -26,25 +25,26 @@ import {
   markAttachedSessionIdle,
 } from "../../app/services/attach-service.js";
 import { externalUserInputSuppressionManager } from "../../app/managers/external-input-suppression-manager.js";
-
-const COMMANDS_CALLBACK_PREFIX = "commands:";
-const COMMANDS_CALLBACK_SELECT_PREFIX = `${COMMANDS_CALLBACK_PREFIX}select:`;
-const COMMANDS_CALLBACK_PAGE_PREFIX = `${COMMANDS_CALLBACK_PREFIX}page:`;
-const COMMANDS_CALLBACK_CANCEL = `${COMMANDS_CALLBACK_PREFIX}cancel`;
-const COMMANDS_CALLBACK_EXECUTE = `${COMMANDS_CALLBACK_PREFIX}execute`;
-const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
-
-interface CommandItem {
-  name: string;
-  description?: string;
-}
+import { opencodeClient } from "../../opencode/client.js";
+import {
+  buildCommandsConfirmKeyboard,
+  buildCommandsListKeyboard,
+  calculateCommandsPaginationRange,
+  COMMANDS_CALLBACK_CANCEL,
+  COMMANDS_CALLBACK_EXECUTE,
+  COMMANDS_CALLBACK_PREFIX,
+  formatCommandsSelectText,
+  formatExecutingCommandMessage,
+  parseCommandPageCallback,
+  parseCommandSelectCallback,
+} from "../menus/command-catalog-menu.js";
 
 interface CommandsListMetadata {
   flow: "commands";
   stage: "list";
   messageId: number;
   projectDirectory: string;
-  commands: CommandItem[];
+  commands: CommandCatalogItem[];
   page: number;
 }
 
@@ -56,9 +56,9 @@ interface CommandsConfirmMetadata {
   commandName: string;
 }
 
-type CommandsMetadata = CommandsListMetadata | CommandsConfirmMetadata;
+export type CommandsMetadata = CommandsListMetadata | CommandsConfirmMetadata;
 
-interface ExecuteCommandParams {
+export interface ExecuteCommandParams {
   projectDirectory: string;
   commandName: string;
   argumentsText: string;
@@ -67,61 +67,6 @@ interface ExecuteCommandParams {
 export interface ExecuteCommandDeps {
   bot: Bot<Context>;
   ensureEventSubscription: (directory: string) => Promise<void>;
-}
-
-interface ExecutingCommandMessage {
-  text: string;
-  entities: Array<{
-    type: "code";
-    offset: number;
-    length: number;
-  }>;
-}
-
-function formatExecutingCommandMessage(commandName: string, args: string): ExecutingCommandMessage {
-  const prefix = t("commands.executing_prefix");
-  const commandText = `/${commandName}`;
-  const argsSuffix = args ? ` ${args}` : "";
-  return {
-    text: `${prefix}\n${commandText}${argsSuffix}`,
-    entities: [
-      {
-        type: "code",
-        offset: prefix.length + 1,
-        length: commandText.length,
-      },
-    ],
-  };
-}
-
-export function buildCommandPageCallback(page: number): string {
-  return `${COMMANDS_CALLBACK_PAGE_PREFIX}${page}`;
-}
-
-export function parseCommandPageCallback(data: string): number | null {
-  if (!data.startsWith(COMMANDS_CALLBACK_PAGE_PREFIX)) {
-    return null;
-  }
-
-  const rawPage = data.slice(COMMANDS_CALLBACK_PAGE_PREFIX.length);
-  const page = Number(rawPage);
-  if (!Number.isInteger(page) || page < 0) {
-    return null;
-  }
-
-  return page;
-}
-
-export function formatCommandsSelectText(page: number): string {
-  if (page === 0) {
-    return t("commands.select");
-  }
-
-  return t("commands.select_page", { page: page + 1 });
-}
-
-function normalizeDirectoryForCommandApi(directory: string): string {
-  return directory.replace(/\\/g, "/");
 }
 
 function getCallbackMessageId(ctx: Context): number | null {
@@ -134,91 +79,12 @@ function getCallbackMessageId(ctx: Context): number | null {
   return typeof messageId === "number" ? messageId : null;
 }
 
-function formatCommandButtonLabel(command: CommandItem): string {
-  const description = command.description?.trim() || t("commands.no_description");
-  const rawLabel = `/${command.name} - ${description}`;
-
-  if (rawLabel.length <= MAX_INLINE_BUTTON_LABEL_LENGTH) {
-    return rawLabel;
-  }
-
-  return `${rawLabel.slice(0, MAX_INLINE_BUTTON_LABEL_LENGTH - 3)}...`;
-}
-
-export interface CommandsPaginationRange {
-  page: number;
-  totalPages: number;
-  startIndex: number;
-  endIndex: number;
-}
-
-export function calculateCommandsPaginationRange(
-  totalCommands: number,
-  page: number,
-  pageSize: number,
-): CommandsPaginationRange {
-  const safePageSize = Math.max(1, pageSize);
-  const totalPages = Math.max(1, Math.ceil(totalCommands / safePageSize));
-  const normalizedPage = Math.min(Math.max(0, page), totalPages - 1);
-  const startIndex = normalizedPage * safePageSize;
-  const endIndex = Math.min(startIndex + safePageSize, totalCommands);
-
-  return {
-    page: normalizedPage,
-    totalPages,
-    startIndex,
-    endIndex,
-  };
-}
-
-function buildCommandsListKeyboard(
-  commands: CommandItem[],
-  page: number,
-  pageSize: number,
-): InlineKeyboard {
-  const keyboard = new InlineKeyboard();
-  const {
-    page: normalizedPage,
-    totalPages,
-    startIndex,
-    endIndex,
-  } = calculateCommandsPaginationRange(commands.length, page, pageSize);
-
-  commands.slice(startIndex, endIndex).forEach((command, index) => {
-    const globalIndex = startIndex + index;
-    keyboard
-      .text(formatCommandButtonLabel(command), `${COMMANDS_CALLBACK_SELECT_PREFIX}${globalIndex}`)
-      .row();
-  });
-
-  if (totalPages > 1) {
-    if (normalizedPage > 0) {
-      keyboard.text(t("commands.button.prev_page"), buildCommandPageCallback(normalizedPage - 1));
-    }
-
-    if (normalizedPage < totalPages - 1) {
-      keyboard.text(t("commands.button.next_page"), buildCommandPageCallback(normalizedPage + 1));
-    }
-
-    keyboard.row();
-  }
-
-  keyboard.text(t("commands.button.cancel"), COMMANDS_CALLBACK_CANCEL);
-  return keyboard;
-}
-
-function buildCommandsConfirmKeyboard(): InlineKeyboard {
-  return new InlineKeyboard()
-    .text(t("commands.button.execute"), COMMANDS_CALLBACK_EXECUTE)
-    .text(t("commands.button.cancel"), COMMANDS_CALLBACK_CANCEL);
-}
-
-function parseCommandItems(value: unknown): CommandItem[] | null {
+function parseCommandItems(value: unknown): CommandCatalogItem[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
 
-  const commands: CommandItem[] = [];
+  const commands: CommandCatalogItem[] = [];
   for (const item of value) {
     if (!item || typeof item !== "object") {
       return null;
@@ -239,7 +105,7 @@ function parseCommandItems(value: unknown): CommandItem[] | null {
   return commands;
 }
 
-function parseCommandsMetadata(state: InteractionState | null): CommandsMetadata | null {
+export function parseCommandsMetadata(state: InteractionState | null): CommandsMetadata | null {
   if (!state || state.kind !== "custom") {
     return null;
   }
@@ -296,48 +162,11 @@ function parseCommandsMetadata(state: InteractionState | null): CommandsMetadata
   return null;
 }
 
-function clearCommandsInteraction(reason: string): void {
+export function clearCommandsInteraction(reason: string): void {
   const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
   if (metadata) {
     interactionManager.clear(reason);
   }
-}
-
-async function getCommandList(projectDirectory: string): Promise<CommandItem[]> {
-  const { data, error } = await opencodeClient.command.list({
-    directory: normalizeDirectoryForCommandApi(projectDirectory),
-  });
-
-  if (error || !data) {
-    throw error || new Error("No command data received");
-  }
-
-  return data
-    .filter((command) => {
-      const source = (command as { source?: unknown }).source;
-      return (
-        typeof command.name === "string" && command.name.trim().length > 0 && source === "command"
-      );
-    })
-    .map((command) => ({
-      name: command.name,
-      description: command.description,
-    }));
-}
-
-function parseSelectIndex(data: string): number | null {
-  if (!data.startsWith(COMMANDS_CALLBACK_SELECT_PREFIX)) {
-    return null;
-  }
-
-  const rawIndex = data.slice(COMMANDS_CALLBACK_SELECT_PREFIX.length);
-  const index = Number(rawIndex);
-
-  if (!Number.isInteger(index) || index < 0) {
-    return null;
-  }
-
-  return index;
 }
 
 async function isSessionBusy(sessionId: string, directory: string): Promise<boolean> {
@@ -408,7 +237,7 @@ async function ensureSessionForProject(
   return sessionInfo;
 }
 
-async function executeCommand(
+export async function executeCommand(
   ctx: Context,
   deps: ExecuteCommandDeps,
   params: ExecuteCommandParams,
@@ -505,44 +334,6 @@ async function executeCommand(
   });
 }
 
-export async function commandsCommand(ctx: CommandContext<Context>): Promise<void> {
-  try {
-    const currentProject = getCurrentProject();
-    if (!currentProject) {
-      await ctx.reply(t("bot.project_not_selected"));
-      return;
-    }
-
-    const commands = await getCommandList(currentProject.worktree);
-    if (commands.length === 0) {
-      await ctx.reply(t("commands.empty"));
-      return;
-    }
-
-    const pageSize = config.bot.commandsListLimit;
-    const keyboard = buildCommandsListKeyboard(commands, 0, pageSize);
-    const message = await ctx.reply(formatCommandsSelectText(0), {
-      reply_markup: keyboard,
-    });
-
-    interactionManager.start({
-      kind: "custom",
-      expectedInput: "callback",
-      metadata: {
-        flow: "commands",
-        stage: "list",
-        messageId: message.message_id,
-        projectDirectory: currentProject.worktree,
-        commands,
-        page: 0,
-      },
-    });
-  } catch (error) {
-    logger.error("[Commands] Error fetching commands list:", error);
-    await ctx.reply(t("commands.fetch_error"));
-  }
-}
-
 export async function handleCommandsCallback(
   ctx: Context,
   deps: ExecuteCommandDeps,
@@ -626,7 +417,7 @@ export async function handleCommandsCallback(
       return true;
     }
 
-    const commandIndex = parseSelectIndex(data);
+    const commandIndex = parseCommandSelectCallback(data);
     if (commandIndex === null || metadata.stage !== "list") {
       await ctx.answerCallbackQuery({ text: t("callback.processing_error"), show_alert: true });
       return true;
@@ -661,39 +452,4 @@ export async function handleCommandsCallback(
     await ctx.answerCallbackQuery({ text: t("callback.processing_error") }).catch(() => {});
     return true;
   }
-}
-
-export async function handleCommandTextArguments(
-  ctx: Context,
-  deps: ExecuteCommandDeps,
-): Promise<boolean> {
-  const text = ctx.message?.text;
-  if (!text || text.startsWith("/")) {
-    return false;
-  }
-
-  const metadata = parseCommandsMetadata(interactionManager.getSnapshot());
-  if (!metadata || metadata.stage !== "confirm") {
-    return false;
-  }
-
-  const argumentsText = text.trim();
-  if (!argumentsText) {
-    await ctx.reply(t("commands.arguments_empty"));
-    return true;
-  }
-
-  clearCommandsInteraction("commands_arguments_submitted");
-
-  if (ctx.chat) {
-    await ctx.api.deleteMessage(ctx.chat.id, metadata.messageId).catch(() => {});
-  }
-
-  await executeCommand(ctx, deps, {
-    projectDirectory: metadata.projectDirectory,
-    commandName: metadata.commandName,
-    argumentsText,
-  });
-
-  return true;
 }

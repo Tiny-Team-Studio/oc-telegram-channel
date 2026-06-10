@@ -1,30 +1,31 @@
-import { CommandContext, Context, InlineKeyboard } from "grammy";
-import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentProject } from "../../settings/manager.js";
+import type { Context } from "grammy";
+import type { McpCatalogServerItem } from "../../app/services/mcp-catalog-service.js";
+import {
+  loadMcpCatalog,
+  toggleMcpCatalogServer,
+} from "../../app/services/mcp-catalog-service.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
-import type { McpStatus } from "@opencode-ai/sdk/v2";
-
-const MCPS_CALLBACK_PREFIX = "mcps:";
-const MCPS_CALLBACK_SELECT_PREFIX = `${MCPS_CALLBACK_PREFIX}select:`;
-const MCPS_CALLBACK_TOGGLE = `${MCPS_CALLBACK_PREFIX}toggle`;
-const MCPS_CALLBACK_BACK = `${MCPS_CALLBACK_PREFIX}back`;
-const MCPS_CALLBACK_CANCEL = `${MCPS_CALLBACK_PREFIX}cancel`;
-const MAX_INLINE_BUTTON_LABEL_LENGTH = 64;
-
-interface McpServerItem {
-  name: string;
-  status: McpStatus;
-}
+import {
+  buildMcpsDetailKeyboard,
+  buildMcpsDetailText,
+  buildMcpsListKeyboard,
+  MCPS_CALLBACK_BACK,
+  MCPS_CALLBACK_CANCEL,
+  MCPS_CALLBACK_PREFIX,
+  MCPS_CALLBACK_SELECT_PREFIX,
+  MCPS_CALLBACK_TOGGLE,
+  parseMcpSelectCallback,
+} from "../menus/mcp-catalog-menu.js";
 
 interface McpsListMetadata {
   flow: "mcps";
   stage: "list";
   messageId: number;
   projectDirectory: string;
-  servers: McpServerItem[];
+  servers: McpCatalogServerItem[];
 }
 
 interface McpsDetailMetadata {
@@ -33,14 +34,10 @@ interface McpsDetailMetadata {
   messageId: number;
   projectDirectory: string;
   serverName: string;
-  servers: McpServerItem[];
+  servers: McpCatalogServerItem[];
 }
 
 type McpsMetadata = McpsListMetadata | McpsDetailMetadata;
-
-function normalizeDirectoryForApi(directory: string): string {
-  return directory.replace(/\\/g, "/");
-}
 
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
@@ -52,110 +49,13 @@ function getCallbackMessageId(ctx: Context): number | null {
   return typeof messageId === "number" ? messageId : null;
 }
 
-function getStatusLabel(status: McpStatus): string {
-  switch (status.status) {
-    case "connected":
-      return t("mcps.status.connected");
-    case "disabled":
-      return t("mcps.status.disabled");
-    case "failed":
-      return t("mcps.status.failed");
-    case "needs_auth":
-      return t("mcps.status.needs_auth");
-    case "needs_client_registration":
-      return t("mcps.status.needs_client_registration");
-    default:
-      return t("common.unknown");
-  }
-}
-
-function getStatusEmoji(status: McpStatus): string {
-  switch (status.status) {
-    case "connected":
-      return "🟢";
-    case "disabled":
-      return "🔴";
-    case "failed":
-      return "⚠️";
-    case "needs_auth":
-      return "🔒";
-    case "needs_client_registration":
-      return "🔒";
-    default:
-      return "❓";
-  }
-}
-
-function formatMcpButtonLabel(server: McpServerItem): string {
-  const rawLabel = `${getStatusEmoji(server.status)} ${server.name}`;
-
-  if (rawLabel.length <= MAX_INLINE_BUTTON_LABEL_LENGTH) {
-    return rawLabel;
-  }
-
-  return `${rawLabel.slice(0, MAX_INLINE_BUTTON_LABEL_LENGTH - 3)}...`;
-}
-
-function buildMcpsListKeyboard(servers: McpServerItem[]): InlineKeyboard {
-  const keyboard = new InlineKeyboard();
-
-  servers.forEach((server, index) => {
-    keyboard
-      .text(formatMcpButtonLabel(server), `${MCPS_CALLBACK_SELECT_PREFIX}${index}`)
-      .row();
-  });
-
-  keyboard.text(t("inline.button.cancel"), MCPS_CALLBACK_CANCEL);
-  return keyboard;
-}
-
-function buildMcpsDetailKeyboard(server: McpServerItem): InlineKeyboard {
-  const keyboard = new InlineKeyboard();
-  let hasToggleButton = false;
-
-  if (server.status.status === "connected") {
-    keyboard.text(t("mcps.button.disable"), MCPS_CALLBACK_TOGGLE);
-    hasToggleButton = true;
-  } else if (server.status.status === "disabled" || server.status.status === "failed") {
-    keyboard.text(t("mcps.button.enable"), MCPS_CALLBACK_TOGGLE);
-    hasToggleButton = true;
-  }
-
-  if (hasToggleButton) {
-    keyboard.row();
-  }
-
-  keyboard.text(t("mcps.button.back"), MCPS_CALLBACK_BACK);
-  keyboard.text(t("inline.button.cancel"), MCPS_CALLBACK_CANCEL);
-
-  return keyboard;
-}
-
-function buildMcpsDetailText(server: McpServerItem): string {
-  const lines: string[] = [];
-  lines.push(t("mcps.detail.title", { name: server.name }));
-  lines.push("");
-  lines.push(t("mcps.detail.status", { status: getStatusLabel(server.status) }));
-
-  if (server.status.status === "failed" || server.status.status === "needs_client_registration") {
-    lines.push(t("mcps.detail.error", { error: server.status.error }));
-  }
-
-  if (server.status.status === "needs_auth" || server.status.status === "needs_client_registration") {
-    lines.push("");
-    lines.push(t("mcps.auth_required"));
-  }
-
-  return lines.join("\n");
-}
-
-function parseMcpsServers(value: unknown): McpServerItem[] | null {
+function parseMcpsServers(value: unknown): McpCatalogServerItem[] | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
   if (Array.isArray(value)) {
-    const servers: McpServerItem[] = [];
+    const servers: McpCatalogServerItem[] = [];
     for (const item of value) {
       if (!item || typeof item !== "object") {
         return null;
@@ -172,9 +72,9 @@ function parseMcpsServers(value: unknown): McpServerItem[] | null {
         return null;
       }
 
-      const mcpStatus: McpStatus = { status: s.status } as McpStatus;
+      const mcpStatus = { status: s.status } as McpCatalogServerItem["status"];
       if ("error" in s && typeof s.error === "string") {
-        (mcpStatus as McpStatus & { error: string }).error = s.error;
+        (mcpStatus as McpCatalogServerItem["status"] & { error: string }).error = s.error;
       }
 
       servers.push({ name, status: mcpStatus });
@@ -184,7 +84,7 @@ function parseMcpsServers(value: unknown): McpServerItem[] | null {
   }
 
   const entries = Object.entries(value as Record<string, unknown>);
-  const servers: McpServerItem[] = [];
+  const servers: McpCatalogServerItem[] = [];
 
   for (const [name, status] of entries) {
     if (!status || typeof status !== "object") {
@@ -196,9 +96,9 @@ function parseMcpsServers(value: unknown): McpServerItem[] | null {
       return null;
     }
 
-    const mcpStatus: McpStatus = { status: s.status } as McpStatus;
+    const mcpStatus = { status: s.status } as McpCatalogServerItem["status"];
     if ("error" in s && typeof s.error === "string") {
-      (mcpStatus as McpStatus & { error: string }).error = s.error;
+      (mcpStatus as McpCatalogServerItem["status"] & { error: string }).error = s.error;
     }
 
     servers.push({ name, status: mcpStatus });
@@ -262,95 +162,6 @@ function clearMcpsInteraction(reason: string): void {
   }
 }
 
-function parseSelectIndex(data: string): number | null {
-  if (!data.startsWith(MCPS_CALLBACK_SELECT_PREFIX)) {
-    return null;
-  }
-
-  const index = Number(data.slice(MCPS_CALLBACK_SELECT_PREFIX.length));
-  if (!Number.isInteger(index) || index < 0) {
-    return null;
-  }
-
-  return index;
-}
-
-async function getMcpServerList(projectDirectory: string): Promise<McpServerItem[]> {
-  const { data, error } = await opencodeClient.mcp.status({
-    directory: normalizeDirectoryForApi(projectDirectory),
-  });
-
-  if (error || !data) {
-    throw error || new Error("No MCP status data received");
-  }
-
-  const servers = parseMcpsServers(data);
-  if (!servers) {
-    throw new Error("Invalid MCP status data format");
-  }
-
-  return servers;
-}
-
-async function toggleMcpServer(
-  projectDirectory: string,
-  serverName: string,
-  enable: boolean,
-): Promise<void> {
-  const params = {
-    name: serverName,
-    directory: normalizeDirectoryForApi(projectDirectory),
-  };
-
-  if (enable) {
-    const { error } = await opencodeClient.mcp.connect(params);
-    if (error) {
-      throw error;
-    }
-  } else {
-    const { error } = await opencodeClient.mcp.disconnect(params);
-    if (error) {
-      throw error;
-    }
-  }
-}
-
-export async function mcpsCommand(ctx: CommandContext<Context>): Promise<void> {
-  try {
-    const currentProject = getCurrentProject();
-    if (!currentProject) {
-      await ctx.reply(t("bot.project_not_selected"));
-      return;
-    }
-
-    const servers = await getMcpServerList(currentProject.worktree);
-    if (servers.length === 0) {
-      await ctx.reply(t("mcps.empty"));
-      return;
-    }
-
-    const keyboard = buildMcpsListKeyboard(servers);
-    const message = await ctx.reply(t("mcps.select"), {
-      reply_markup: keyboard,
-    });
-
-    interactionManager.start({
-      kind: "custom",
-      expectedInput: "callback",
-      metadata: {
-        flow: "mcps",
-        stage: "list",
-        messageId: message.message_id,
-        projectDirectory: currentProject.worktree,
-        servers,
-      },
-    });
-  } catch (error) {
-    logger.error("[Mcps] Error fetching MCP servers list:", error);
-    await ctx.reply(t("mcps.fetch_error"));
-  }
-}
-
 export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
   if (!data || !data.startsWith(MCPS_CALLBACK_PREFIX)) {
@@ -379,7 +190,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
         return true;
       }
 
-      const servers = await getMcpServerList(metadata.projectDirectory);
+      const servers = await loadMcpCatalog(metadata.projectDirectory);
       const keyboard = buildMcpsListKeyboard(servers);
       await ctx.editMessageText(t("mcps.select"), { reply_markup: keyboard });
       await ctx.answerCallbackQuery();
@@ -414,9 +225,9 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
       const enable = server.status.status !== "connected";
       await ctx.answerCallbackQuery({ text: enable ? t("mcps.enabling") : t("mcps.disabling") });
 
-      await toggleMcpServer(metadata.projectDirectory, serverName, enable);
+      await toggleMcpCatalogServer(metadata.projectDirectory, serverName, enable);
 
-      const updatedServers = await getMcpServerList(metadata.projectDirectory);
+      const updatedServers = await loadMcpCatalog(metadata.projectDirectory);
       const updatedServer = updatedServers.find((s) => s.name === serverName);
       if (!updatedServer) {
         await ctx.editMessageText(t("mcps.select"), {
@@ -460,7 +271,7 @@ export async function handleMcpsCallback(ctx: Context): Promise<boolean> {
         return true;
       }
 
-      const serverIndex = parseSelectIndex(data);
+      const serverIndex = parseMcpSelectCallback(data);
       const server = serverIndex === null ? undefined : metadata.servers[serverIndex];
       if (!server) {
         await ctx.answerCallbackQuery({ text: t("inline.inactive_callback"), show_alert: true });
