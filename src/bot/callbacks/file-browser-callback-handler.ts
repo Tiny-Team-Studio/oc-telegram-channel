@@ -9,7 +9,7 @@ import {
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { t } from "../../i18n/index.js";
 import { getProjectByWorktree } from "../../app/services/project-service.js";
-import { upsertSessionDirectory } from "../../session/cache-manager.js";
+import { upsertSessionDirectory } from "../../app/services/session-cache-service.js";
 import { logger } from "../../utils/logger.js";
 import { replyBusyBlocked } from "../render/busy-blocked-renderer.js";
 import { ensureActiveInlineMenu, clearActiveInlineMenu } from "../menus/inline-menu.js";

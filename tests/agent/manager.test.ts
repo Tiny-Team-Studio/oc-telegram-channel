@@ -66,7 +66,7 @@ vi.mock("../../src/settings/manager.js", () => ({
   setCurrentAgent: mocked.setCurrentAgentMock,
 }));
 
-vi.mock("../../src/session/manager.js", () => ({
+vi.mock("../../src/app/services/session-service.js", () => ({
   getCurrentSession: mocked.getCurrentSessionMock,
 }));
 

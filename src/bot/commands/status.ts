@@ -1,7 +1,7 @@
 import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { getGitWorktreeContext } from "../../app/services/worktree-service.js";
-import { getCurrentSession } from "../../session/manager.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
 import { getCurrentProject, isTtsEnabled } from "../../settings/manager.js";
 import { fetchCurrentAgent } from "../../app/services/agent-selection-service.js";
 import { fetchCurrentModel } from "../../app/services/model-selection-service.js";

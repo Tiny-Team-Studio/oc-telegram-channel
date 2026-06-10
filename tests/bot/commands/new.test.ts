@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
-import { newCommand } from "../../../src/bot/commands/new.js";
+import { newCommand } from "../../../src/bot/commands/new-command.js";
 import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
 import { t } from "../../../src/i18n/index.js";
 
@@ -23,11 +23,11 @@ vi.mock("../../../src/settings/manager.js", () => ({
   getCurrentProject: mocked.getCurrentProjectMock,
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   setCurrentSession: vi.fn(),
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: vi.fn().mockResolvedValue(undefined),
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));

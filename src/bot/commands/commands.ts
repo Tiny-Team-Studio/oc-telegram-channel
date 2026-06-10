@@ -5,9 +5,9 @@ import {
   clearSession,
   getCurrentSession,
   setCurrentSession,
-  type SessionInfo,
-} from "../../session/manager.js";
-import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
+} from "../../app/services/session-service.js";
+import type { SessionInfo } from "../../app/types/session.js";
+import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import type { InteractionState } from "../../app/types/interaction.js";
 import { summaryAggregator } from "../../summary/aggregator.js";

@@ -427,7 +427,7 @@ src/bot/
   4. Обновить зависимости с projects/status/open/session cache.
   5. Запустить git/worktree и bot/commands/worktree тесты, затем build.
 
-- [ ] **Этап 14. Sessions и rename**
+- [x] **Этап 14. Sessions и rename**
 
   1. Перенести `src/session/manager.ts` -> `app/services/session-service.ts`.
   2. Перенести `src/session/cache-manager.ts` -> `app/stores/session-directory-cache-store.ts` или `app/services/session-cache-service.ts` после проверки роли.

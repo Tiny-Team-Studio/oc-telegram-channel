@@ -15,13 +15,13 @@ import {
   MODEL_BUTTON_TEXT_PATTERN,
   VARIANT_BUTTON_TEXT_PATTERN,
 } from "./message-patterns.js";
+import { sessionsCommand } from "./commands/sessions-command.js";
+import { buildBackgroundSessionOpenKeyboard } from "./menus/session-selection-menu.js";
 import {
-  buildBackgroundSessionOpenKeyboard,
   handleBackgroundSessionOpen,
   handleSessionSelect,
-  sessionsCommand,
-} from "./commands/sessions.js";
-import { newCommand } from "./commands/new.js";
+} from "./callbacks/session-callback-handler.js";
+import { newCommand } from "./commands/new-command.js";
 import { projectsCommand } from "./commands/projects-command.js";
 import { handleProjectSelect } from "./callbacks/project-callback-handler.js";
 import { worktreeCommand } from "./commands/worktree-command.js";
@@ -32,7 +32,8 @@ import { abortCommand } from "./commands/abort.js";
 import { detachCommand } from "./commands/detach.js";
 import { opencodeStartCommand } from "./commands/opencode-start.js";
 import { opencodeStopCommand } from "./commands/opencode-stop.js";
-import { renameCommand, handleRenameCancel, handleRenameTextAnswer } from "./commands/rename.js";
+import { renameCommand } from "./commands/rename-command.js";
+import { handleRenameCancel, handleRenameTextAnswer } from "./callbacks/rename-callback-handler.js";
 import { handleTaskCallback, handleTaskTextInput, taskCommand } from "./commands/task.js";
 import { handleTaskListCallback, taskListCommand } from "./commands/tasklist.js";
 import {
@@ -77,8 +78,8 @@ import { summaryAggregator } from "../summary/aggregator.js";
 import { formatToolInfo } from "../summary/formatter.js";
 import { renderSubagentCards } from "../summary/subagent-formatter.js";
 import { ToolMessageBatcher } from "../summary/tool-message-batcher.js";
-import { getCurrentSession } from "../session/manager.js";
-import { ingestSessionInfoForCache } from "../session/cache-manager.js";
+import { getCurrentSession } from "../app/services/session-service.js";
+import { ingestSessionInfoForCache } from "../app/services/session-cache-service.js";
 import { logger } from "../utils/logger.js";
 import { safeBackgroundTask } from "../utils/safe-background-task.js";
 import { withTelegramRateLimitRetry } from "../utils/telegram-rate-limit-retry.js";

@@ -4,7 +4,7 @@ import { abortCommand, abortCurrentOperation } from "../../../src/bot/commands/a
 import { clearAllInteractionState } from "../../../src/app/managers/interaction-manager.js";
 import { questionManager } from "../../../src/app/managers/question-manager.js";
 import { permissionManager } from "../../../src/app/managers/permission-manager.js";
-import { renameManager } from "../../../src/rename/manager.js";
+import { renameManager } from "../../../src/app/managers/rename-manager.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
 import type { Question } from "../../../src/app/types/question.js";
@@ -24,7 +24,7 @@ const mocked = vi.hoisted(() => ({
   clearPromptResponseModeMock: vi.fn(),
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
 }));
 

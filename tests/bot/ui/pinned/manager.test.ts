@@ -19,7 +19,9 @@ vi.mock("../../../../src/opencode/client.js", () => ({ opencodeClient: mocked.op
 vi.mock("../../../../src/app/services/worktree-service.js", () => ({
   getGitWorktreeContext: mocked.getGitWorktreeContext,
 }));
-vi.mock("../../../../src/session/manager.js", () => ({ getCurrentSession: mocked.getCurrentSession }));
+vi.mock("../../../../src/app/services/session-service.js", () => ({
+  getCurrentSession: mocked.getCurrentSession,
+}));
 vi.mock("../../../../src/settings/manager.js", () => ({
   getCurrentProject: mocked.getCurrentProject,
   getPinnedMessageId: mocked.getPinnedMessageId,

@@ -5,7 +5,7 @@ import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { formatVariantForButton } from "../../app/services/variant-selection-service.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import { clearSession } from "../../session/manager.js";
+import { clearSession } from "../../app/services/session-service.js";
 import { clearProject } from "../../settings/manager.js";
 import { foregroundSessionState } from "../../scheduled-task/foreground-state.js";
 import { abortCurrentOperation } from "./abort.js";

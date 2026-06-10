@@ -59,13 +59,13 @@ export async function resetSingletonState(): Promise<void> {
   ] = await Promise.all([
     import("../../src/app/managers/question-manager.js"),
     import("../../src/app/managers/permission-manager.js"),
-    import("../../src/rename/manager.js"),
+    import("../../src/app/managers/rename-manager.js"),
     import("../../src/app/managers/interaction-manager.js"),
     import("../../src/summary/aggregator.js"),
     import("../../src/bot/keyboards/keyboard-manager.js"),
     import("../../src/bot/pinned/pinned-message-manager.js"),
     import("../../src/opencode/events.js"),
-    import("../../src/session/cache-manager.js"),
+    import("../../src/app/services/session-cache-service.js"),
     import("../../src/utils/logger.js"),
   ]);
 

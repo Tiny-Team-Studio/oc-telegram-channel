@@ -1,7 +1,7 @@
 import { Context } from "grammy";
 import { getStoredModel } from "../../app/services/model-selection-service.js";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentSession } from "../../session/manager.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { clearActiveInlineMenu, ensureActiveInlineMenu } from "../menus/inline-menu.js";

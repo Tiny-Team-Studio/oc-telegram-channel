@@ -6,7 +6,7 @@ import type {
 } from "../types/interaction.js";
 import { permissionManager } from "./permission-manager.js";
 import { questionManager } from "./question-manager.js";
-import { renameManager } from "../../rename/manager.js";
+import { renameManager } from "./rename-manager.js";
 import { taskCreationManager } from "../../scheduled-task/creation-manager.js";
 import { logger } from "../../utils/logger.js";
 

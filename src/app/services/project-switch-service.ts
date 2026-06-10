@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import type { ProjectInfo } from "../types/project.js";
 import { setCurrentProject } from "../../settings/manager.js";
-import { clearSession } from "../../session/manager.js";
+import { clearSession } from "./session-service.js";
 import { summaryAggregator } from "../../summary/aggregator.js";
 import { pinnedMessageManager } from "../../bot/pinned/pinned-message-manager.js";
 import { keyboardManager } from "../../bot/keyboards/keyboard-manager.js";

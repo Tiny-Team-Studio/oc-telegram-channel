@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Context } from "grammy";
 import {
-  buildBackgroundSessionOpenKeyboard,
   handleBackgroundSessionOpen,
   handleSessionSelect,
-  sessionsCommand,
-} from "../../../src/bot/commands/sessions.js";
+} from "../../../src/bot/callbacks/session-callback-handler.js";
+import { sessionsCommand } from "../../../src/bot/commands/sessions-command.js";
+import { buildBackgroundSessionOpenKeyboard } from "../../../src/bot/menus/session-selection-menu.js";
 import { interactionManager } from "../../../src/app/managers/interaction-manager.js";
 import { foregroundSessionState } from "../../../src/scheduled-task/foreground-state.js";
 import { t } from "../../../src/i18n/index.js";
@@ -51,7 +51,7 @@ vi.mock("../../../src/settings/manager.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   setCurrentSession: mocked.setCurrentSessionMock,
 }));
 

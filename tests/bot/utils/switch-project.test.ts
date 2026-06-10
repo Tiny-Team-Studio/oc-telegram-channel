@@ -26,7 +26,7 @@ const mocked = vi.hoisted(() => ({
 vi.mock("../../../src/settings/manager.js", () => ({
   setCurrentProject: mocked.setCurrentProjectMock,
 }));
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   clearSession: mocked.clearSessionMock,
 }));
 vi.mock("../../../src/summary/aggregator.js", () => ({

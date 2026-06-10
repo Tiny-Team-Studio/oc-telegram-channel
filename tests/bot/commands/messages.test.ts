@@ -32,7 +32,7 @@ vi.mock("../../../src/settings/manager.js", () => ({
   getCurrentProject: vi.fn(() => mocked.currentProject),
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
   setCurrentSession: mocked.setCurrentSessionMock,
 }));
@@ -41,7 +41,7 @@ vi.mock("../../../src/attach/service.js", () => ({
   attachToSession: mocked.attachToSessionMock,
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: mocked.ingestSessionInfoForCacheMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));

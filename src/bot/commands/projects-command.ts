@@ -1,7 +1,7 @@
 import type { CommandContext, Context } from "grammy";
 import { getProjects } from "../../app/services/project-service.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
-import { syncSessionDirectoryCache } from "../../session/cache-manager.js";
+import { syncSessionDirectoryCache } from "../../app/services/session-cache-service.js";
 import { t } from "../../i18n/index.js";
 import { logger } from "../../utils/logger.js";
 import { buildProjectsMenuView } from "../menus/project-selection-menu.js";

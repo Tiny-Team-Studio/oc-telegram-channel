@@ -1,6 +1,6 @@
 import { opencodeClient } from "../../opencode/client.js";
 import { getCurrentProject } from "../../settings/manager.js";
-import { getCurrentSession } from "../../session/manager.js";
+import { getCurrentSession } from "./session-service.js";
 import { getCurrentAgent, setCurrentAgent } from "../../settings/manager.js";
 import { logger } from "../../utils/logger.js";
 import type { AgentInfo } from "../types/agent.js";

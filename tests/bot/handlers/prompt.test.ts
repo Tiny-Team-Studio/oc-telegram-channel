@@ -31,13 +31,13 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: vi.fn(() => mocked.currentSession),
   setCurrentSession: vi.fn(),
   clearSession: vi.fn(),
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   ingestSessionInfoForCache: vi.fn(),
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));

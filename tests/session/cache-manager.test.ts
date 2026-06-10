@@ -10,7 +10,7 @@ import {
   syncSessionDirectoryCache,
   upsertSessionDirectory,
   warmupSessionDirectoryCache,
-} from "../../src/session/cache-manager.js";
+} from "../../src/app/services/session-cache-service.js";
 
 const { sessionListMock, loggerWarnMock, loggerDebugMock, loggerInfoMock, loggerErrorMock } =
   vi.hoisted(() => ({
@@ -53,7 +53,7 @@ function createSession(directory: string, updated: number) {
   };
 }
 
-describe("session/cache-manager", () => {
+describe("session-cache-service", () => {
   let tempHome: string;
 
   beforeEach(async () => {

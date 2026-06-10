@@ -1,47 +1,29 @@
-import type { Bot } from "grammy";
-import { CommandContext, Context } from "grammy";
-import { InlineKeyboard } from "grammy";
+import type { Bot, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
 import { resolveProjectAgent } from "../../app/services/agent-selection-service.js";
-import { setCurrentSession, SessionInfo } from "../../session/manager.js";
+import { setCurrentSession } from "../../app/services/session-service.js";
+import type { SessionInfo } from "../../app/types/session.js";
 import { getCurrentProject } from "../../settings/manager.js";
-import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
-import { interactionManager } from "../../app/managers/interaction-manager.js";
+import { clearAllInteractionState, interactionManager } from "../../app/managers/interaction-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";
-import {
-  appendInlineMenuCancelButton,
-  ensureActiveInlineMenu,
-  replyWithInlineMenu,
-} from "../menus/inline-menu.js";
+import { appendInlineMenuCancelButton, ensureActiveInlineMenu } from "../menus/inline-menu.js";
 import { isForegroundBusy } from "../../app/services/run-control-service.js";
 import { replyBusyBlocked } from "../render/busy-blocked-renderer.js";
 import { logger } from "../../utils/logger.js";
 import { safeBackgroundTask } from "../../utils/safe-background-task.js";
 import { config } from "../../config.js";
-import { getDateLocale, t } from "../../i18n/index.js";
+import { t } from "../../i18n/index.js";
 import { attachToSession } from "../../attach/service.js";
 import { renderAssistantFinalPartsSafe } from "../render/assistant-rendering.js";
 import { sendRenderedBotPart } from "../ui/telegram-text.js";
-
-const SESSION_CALLBACK_PREFIX = "session:";
-const SESSION_PAGE_CALLBACK_PREFIX = "session:page:";
-const BACKGROUND_SESSION_CALLBACK_PREFIX = "background-session:";
-const SESSION_FETCH_EXTRA_COUNT = 1;
-
-type SessionListItem = {
-  id: string;
-  title: string;
-  directory: string;
-  time: {
-    created: number;
-  };
-};
-
-type SessionPage = {
-  sessions: SessionListItem[];
-  hasNext: boolean;
-  page: number;
-};
+import {
+  buildSessionSelectionMenuView,
+  parseBackgroundSessionCallback,
+  parseSessionIdCallback,
+  parseSessionPageCallback,
+  SESSION_CALLBACK_PREFIX,
+  loadSessionPage,
+} from "../menus/session-selection-menu.js";
 
 export interface SessionSelectDeps {
   bot: Bot<Context>;
@@ -55,201 +37,33 @@ interface SelectSessionByIdOptions {
   postSelectAction: "preview" | "latest_assistant_response" | "none";
 }
 
-type BackgroundSessionOpenKind = "assistant_response" | "question_asked" | "permission_asked";
-
-interface BackgroundSessionCallbackPayload {
-  sessionId: string;
-  kind: BackgroundSessionOpenKind | null;
-}
-
-const BACKGROUND_SESSION_KIND_CALLBACK_MARKERS: Record<BackgroundSessionOpenKind, string> = {
-  assistant_response: "a",
-  question_asked: "q",
-  permission_asked: "p",
+type SessionPreviewItem = {
+  role: "user" | "assistant";
+  text: string;
+  created: number;
 };
 
-const BACKGROUND_SESSION_KIND_BY_CALLBACK_MARKER: Record<string, BackgroundSessionOpenKind> = {
-  a: "assistant_response",
-  q: "question_asked",
-  p: "permission_asked",
+const PREVIEW_MESSAGES_LIMIT = 6;
+const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
+const PREVIEW_ITEM_MAX_LENGTH = 420;
+const TELEGRAM_MESSAGE_LIMIT = 4096;
+
+type SessionMessageLike = {
+  info: {
+    role?: string;
+    summary?: boolean;
+    time?: {
+      created?: number;
+    };
+  };
+  parts: Array<{ type: string; text?: string }>;
 };
-
-function buildSessionPageCallback(page: number): string {
-  return `${SESSION_PAGE_CALLBACK_PREFIX}${page}`;
-}
-
-function parseSessionPageCallback(data: string): number | null {
-  if (!data.startsWith(SESSION_PAGE_CALLBACK_PREFIX)) {
-    return null;
-  }
-
-  const rawPage = data.slice(SESSION_PAGE_CALLBACK_PREFIX.length);
-  const page = Number(rawPage);
-  if (!Number.isInteger(page) || page < 0) {
-    return null;
-  }
-
-  return page;
-}
-
-function parseSessionIdCallback(data: string): string | null {
-  if (!data.startsWith(SESSION_CALLBACK_PREFIX)) {
-    return null;
-  }
-
-  if (data.startsWith(SESSION_PAGE_CALLBACK_PREFIX)) {
-    return null;
-  }
-
-  const sessionId = data.slice(SESSION_CALLBACK_PREFIX.length);
-  return sessionId.length > 0 ? sessionId : null;
-}
-
-function parseBackgroundSessionCallback(data: string): BackgroundSessionCallbackPayload | null {
-  if (!data.startsWith(BACKGROUND_SESSION_CALLBACK_PREFIX)) {
-    return null;
-  }
-
-  const payload = data.slice(BACKGROUND_SESSION_CALLBACK_PREFIX.length);
-  const markerSeparatorIndex = payload.indexOf(":");
-  if (markerSeparatorIndex < 0) {
-    return payload.length > 0 ? { sessionId: payload, kind: null } : null;
-  }
-
-  const marker = payload.slice(0, markerSeparatorIndex);
-  const sessionId = payload.slice(markerSeparatorIndex + 1);
-  const kind = BACKGROUND_SESSION_KIND_BY_CALLBACK_MARKER[marker];
-  if (!kind || sessionId.length === 0) {
-    return null;
-  }
-
-  return { sessionId, kind };
-}
 
 async function removeCallbackReplyMarkup(ctx: Context): Promise<void> {
   try {
     await ctx.editMessageReplyMarkup();
   } catch (err) {
     logger.debug("[Sessions] Failed to remove background session button:", err);
-  }
-}
-
-export function buildBackgroundSessionOpenKeyboard(
-  sessionId: string,
-  kind: BackgroundSessionOpenKind,
-): InlineKeyboard {
-  const marker = BACKGROUND_SESSION_KIND_CALLBACK_MARKERS[kind];
-  return new InlineKeyboard().text(
-    t("background.open_session_button"),
-    `${BACKGROUND_SESSION_CALLBACK_PREFIX}${marker}:${sessionId}`,
-  );
-}
-
-function formatSessionsSelectText(page: number): string {
-  if (page === 0) {
-    return t("sessions.select");
-  }
-
-  return t("sessions.select_page", { page: page + 1 });
-}
-
-async function loadSessionPage(
-  directory: string,
-  page: number,
-  pageSize: number,
-): Promise<SessionPage> {
-  const startIndex = page * pageSize;
-  const endExclusive = startIndex + pageSize;
-
-  const { data: sessions, error } = await opencodeClient.session.list({
-    directory,
-    limit: endExclusive + SESSION_FETCH_EXTRA_COUNT,
-    roots: true,
-  });
-
-  if (error || !sessions) {
-    throw error || new Error("No data received from server");
-  }
-
-  const hasNext = sessions.length > endExclusive;
-  const pagedSessions = sessions.slice(startIndex, endExclusive);
-
-  logger.debug(
-    `[Sessions] Loaded page=${page + 1}, startIndex=${startIndex}, endExclusive=${endExclusive}, pageSize=${pageSize}, items=${pagedSessions.length}, hasNext=${hasNext}`,
-  );
-
-  return {
-    sessions: pagedSessions as SessionListItem[],
-    hasNext,
-    page,
-  };
-}
-
-function buildSessionsKeyboard(pageData: SessionPage, pageSize: number): InlineKeyboard {
-  const keyboard = new InlineKeyboard();
-  const localeForDate = getDateLocale();
-  const pageStartIndex = pageData.page * pageSize;
-
-  pageData.sessions.forEach((session, index) => {
-    const date = new Date(session.time.created).toLocaleDateString(localeForDate);
-    const label = `${pageStartIndex + index + 1}. ${session.title} (${date})`;
-    keyboard.text(label, `${SESSION_CALLBACK_PREFIX}${session.id}`).row();
-  });
-
-  if (pageData.page > 0) {
-    keyboard.text(t("sessions.button.prev_page"), buildSessionPageCallback(pageData.page - 1));
-  }
-
-  if (pageData.hasNext) {
-    keyboard.text(t("sessions.button.next_page"), buildSessionPageCallback(pageData.page + 1));
-  }
-
-  if (pageData.page > 0 || pageData.hasNext) {
-    keyboard.row();
-  }
-
-  return keyboard;
-}
-
-export async function sessionsCommand(ctx: CommandContext<Context>) {
-  try {
-    if (isForegroundBusy()) {
-      await replyBusyBlocked(ctx);
-      return;
-    }
-
-    const pageSize = config.bot.sessionsListLimit;
-    const currentProject = getCurrentProject();
-
-    if (!currentProject) {
-      await ctx.reply(t("sessions.project_not_selected"));
-      return;
-    }
-
-    logger.debug(`[Sessions] Fetching sessions for directory: ${currentProject.worktree}`);
-
-    const firstPage = await loadSessionPage(currentProject.worktree, 0, pageSize);
-
-    logger.debug(`[Sessions] Found ${firstPage.sessions.length} sessions on page 1`);
-    firstPage.sessions.forEach((session) => {
-      logger.debug(`[Sessions] Session: ${session.title} | ${session.directory}`);
-    });
-
-    if (firstPage.sessions.length === 0) {
-      await ctx.reply(t("sessions.empty"));
-      return;
-    }
-
-    const keyboard = buildSessionsKeyboard(firstPage, pageSize);
-
-    await replyWithInlineMenu(ctx, {
-      menuKind: "session",
-      text: formatSessionsSelectText(firstPage.page),
-      keyboard,
-    });
-  } catch (error) {
-    logger.error("[Sessions] Error fetching sessions:", error);
-    await ctx.reply(t("sessions.fetch_error"));
   }
 }
 
@@ -464,9 +278,9 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
           return true;
         }
 
-        const keyboard = buildSessionsKeyboard(pageData, pageSize);
+        const { text, keyboard } = buildSessionSelectionMenuView(pageData, pageSize);
         appendInlineMenuCancelButton(keyboard, "session");
-        await ctx.editMessageText(formatSessionsSelectText(pageData.page), {
+        await ctx.editMessageText(text, {
           reply_markup: keyboard,
         });
         await ctx.answerCallbackQuery();
@@ -498,28 +312,6 @@ export async function handleSessionSelect(ctx: Context, deps: SessionSelectDeps)
 
   return true;
 }
-
-type SessionPreviewItem = {
-  role: "user" | "assistant";
-  text: string;
-  created: number;
-};
-
-const PREVIEW_MESSAGES_LIMIT = 6;
-const LATEST_ASSISTANT_RESPONSE_MESSAGES_LIMIT = 20;
-const PREVIEW_ITEM_MAX_LENGTH = 420;
-const TELEGRAM_MESSAGE_LIMIT = 4096;
-
-type SessionMessageLike = {
-  info: {
-    role?: string;
-    summary?: boolean;
-    time?: {
-      created?: number;
-    };
-  };
-  parts: Array<{ type: string; text?: string }>;
-};
 
 function extractTextParts(
   parts: Array<{ type: string; text?: string }>,

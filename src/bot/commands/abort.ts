@@ -1,6 +1,6 @@
 import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentSession } from "../../session/manager.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
 import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";

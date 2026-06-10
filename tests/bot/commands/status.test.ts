@@ -29,7 +29,7 @@ vi.mock("../../../src/opencode/client.js", () => ({
   },
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   getCurrentSession: mocked.getCurrentSessionMock,
 }));
 

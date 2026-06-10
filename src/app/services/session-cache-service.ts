@@ -1,21 +1,10 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { opencodeClient } from "../opencode/client.js";
-import { getSessionDirectoryCache, setSessionDirectoryCache } from "../settings/manager.js";
-import { logger } from "../utils/logger.js";
-
-export interface CachedSessionDirectory {
-  worktree: string;
-  lastUpdated: number;
-}
-
-export interface SessionDirectoryProject {
-  id: string;
-  worktree: string;
-  name: string;
-  lastUpdated: number;
-}
+import { opencodeClient } from "../../opencode/client.js";
+import { getSessionDirectoryCache, setSessionDirectoryCache } from "../../settings/manager.js";
+import { logger } from "../../utils/logger.js";
+import type { CachedSessionDirectory, SessionDirectoryProject } from "../types/session.js";
 
 interface SessionDirectoryCacheData {
   version: 1;

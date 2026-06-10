@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCachedSessionProjects } from "../../session/cache-manager.js";
+import { getCachedSessionProjects } from "./session-cache-service.js";
 import { logger } from "../../utils/logger.js";
 import type { ProjectInfo } from "../types/project.js";
 

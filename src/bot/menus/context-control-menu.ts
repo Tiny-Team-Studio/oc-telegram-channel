@@ -1,5 +1,5 @@
 import { Context, InlineKeyboard } from "grammy";
-import { getCurrentSession } from "../../session/manager.js";
+import { getCurrentSession } from "../../app/services/session-service.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
 import { replyWithInlineMenu } from "./inline-menu.js";

@@ -1,11 +1,12 @@
-import { CommandContext, Context, InlineKeyboard } from "grammy";
+import { Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
-import { getCurrentSession, setCurrentSession } from "../../session/manager.js";
-import { renameManager } from "../../rename/manager.js";
+import { setCurrentSession } from "../../app/services/session-service.js";
+import { renameManager } from "../../app/managers/rename-manager.js";
 import { interactionManager } from "../../app/managers/interaction-manager.js";
 import { pinnedMessageManager } from "../pinned/pinned-message-manager.js";
 import { logger } from "../../utils/logger.js";
 import { t } from "../../i18n/index.js";
+import { RENAME_CANCEL_CALLBACK } from "../menus/rename-menu.js";
 
 function getCallbackMessageId(ctx: Context): number | null {
   const message = ctx.callbackQuery?.message;
@@ -24,42 +25,9 @@ function clearRenameInteraction(reason: string): void {
   }
 }
 
-export async function renameCommand(ctx: CommandContext<Context>): Promise<void> {
-  try {
-    const currentSession = getCurrentSession();
-
-    if (!currentSession) {
-      await ctx.reply(t("rename.no_session"));
-      return;
-    }
-
-    const keyboard = new InlineKeyboard().text(t("rename.button.cancel"), "rename:cancel");
-
-    const message = await ctx.reply(t("rename.prompt", { title: currentSession.title }), {
-      reply_markup: keyboard,
-    });
-
-    renameManager.startWaiting(currentSession.id, currentSession.directory, currentSession.title);
-    renameManager.setMessageId(message.message_id);
-    interactionManager.start({
-      kind: "rename",
-      expectedInput: "text",
-      metadata: {
-        sessionId: currentSession.id,
-        messageId: message.message_id,
-      },
-    });
-
-    logger.info(`[RenameCommand] Waiting for new title for session: ${currentSession.id}`);
-  } catch (error) {
-    logger.error("[RenameCommand] Error starting rename flow:", error);
-    await ctx.reply(t("rename.error"));
-  }
-}
-
 export async function handleRenameCancel(ctx: Context): Promise<boolean> {
   const data = ctx.callbackQuery?.data;
-  if (!data || data !== "rename:cancel") {
+  if (!data || data !== RENAME_CANCEL_CALLBACK) {
     return false;
   }
 

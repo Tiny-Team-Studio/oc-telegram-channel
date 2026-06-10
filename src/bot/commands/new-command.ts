@@ -1,8 +1,9 @@
 import type { Bot } from "grammy";
 import { CommandContext, Context } from "grammy";
 import { opencodeClient } from "../../opencode/client.js";
-import { setCurrentSession, SessionInfo } from "../../session/manager.js";
-import { ingestSessionInfoForCache } from "../../session/cache-manager.js";
+import { setCurrentSession } from "../../app/services/session-service.js";
+import type { SessionInfo } from "../../app/types/session.js";
+import { ingestSessionInfoForCache } from "../../app/services/session-cache-service.js";
 import { getCurrentProject } from "../../settings/manager.js";
 import { clearAllInteractionState } from "../../app/managers/interaction-manager.js";
 import { keyboardManager } from "../keyboards/keyboard-manager.js";

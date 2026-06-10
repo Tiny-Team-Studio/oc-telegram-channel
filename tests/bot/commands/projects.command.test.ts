@@ -12,7 +12,7 @@ const mocked = vi.hoisted(() => ({
   replyWithInlineMenuMock: vi.fn(),
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   syncSessionDirectoryCache: mocked.syncSessionDirectoryCacheMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));
@@ -30,7 +30,7 @@ vi.mock("../../../src/settings/manager.js", () => ({
   setCurrentProject: vi.fn(),
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   clearSession: vi.fn(),
 }));
 

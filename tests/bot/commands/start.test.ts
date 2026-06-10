@@ -32,7 +32,7 @@ vi.mock("../../../src/bot/commands/abort.js", () => ({
   abortCurrentOperation: mocked.abortCurrentOperationMock,
 }));
 
-vi.mock("../../../src/session/manager.js", () => ({
+vi.mock("../../../src/app/services/session-service.js", () => ({
   clearSession: mocked.clearSessionMock,
 }));
 

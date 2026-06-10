@@ -41,7 +41,7 @@ vi.mock("../../../src/bot/render/busy-blocked-renderer.js", () => ({
   replyBusyBlocked: mocked.replyBusyBlockedMock,
 }));
 
-vi.mock("../../../src/session/cache-manager.js", () => ({
+vi.mock("../../../src/app/services/session-cache-service.js", () => ({
   upsertSessionDirectory: mocked.upsertSessionDirectoryMock,
   __resetSessionDirectoryCacheForTests: vi.fn(),
 }));

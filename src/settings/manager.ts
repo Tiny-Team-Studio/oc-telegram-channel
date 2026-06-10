@@ -1,24 +1,10 @@
 import type { ModelInfo } from "../app/types/model.js";
 import type { ProjectInfo } from "../app/types/project.js";
+import type { SessionDirectoryCacheInfo, SessionInfo } from "../app/types/session.js";
 import { cloneScheduledTask, type ScheduledTask } from "../scheduled-task/types.js";
 import path from "node:path";
 import { getRuntimePaths } from "../runtime/paths.js";
 import { logger } from "../utils/logger.js";
-
-export interface SessionInfo {
-  id: string;
-  title: string;
-  directory: string;
-}
-
-export interface SessionDirectoryCacheInfo {
-  version: 1;
-  lastSyncedUpdatedAt: number;
-  directories: Array<{
-    worktree: string;
-    lastUpdated: number;
-  }>;
-}
 
 export interface ScheduledTaskSessionIgnoreInfo {
   sessionId: string;
