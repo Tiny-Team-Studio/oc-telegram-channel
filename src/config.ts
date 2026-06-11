@@ -7,7 +7,7 @@ dotenv.config({ path: runtimePaths.envFilePath, quiet: true });
 
 export type MessageFormatMode = "raw" | "markdown";
 export type StreamingMode = "edit" | "draft";
-export type TtsProvider = "openai" | "google";
+export type TtsProvider = "openai" | "google" | "elevenlabs";
 
 function getEnvVar(key: string, required: boolean = true): string {
   const value = process.env[key];
@@ -95,7 +95,7 @@ function getOptionalMessageFormatModeEnvVar(
   return defaultValue;
 }
 
-const VALID_TTS_PROVIDERS: TtsProvider[] = ["openai", "google"];
+const VALID_TTS_PROVIDERS: TtsProvider[] = ["openai", "google", "elevenlabs"];
 
 function getOptionalTtsProviderEnvVar(key: string, defaultValue: TtsProvider): TtsProvider {
   const value = getEnvVar(key, false);
@@ -202,7 +202,12 @@ export const config = {
   },
   tts: (() => {
     const provider = getOptionalTtsProviderEnvVar("TTS_PROVIDER", "openai");
-    const defaultVoice = provider === "google" ? "en-US-Studio-O" : "alloy";
+    const defaultVoice =
+      provider === "google"
+        ? "en-US-Studio-O"
+        : provider === "elevenlabs"
+          ? "21m00Tcm4TlvDq8ikWAM"
+          : "alloy";
     return {
       apiUrl: getEnvVar("TTS_API_URL", false),
       apiKey: getEnvVar("TTS_API_KEY", false),

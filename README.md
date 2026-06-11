@@ -239,11 +239,11 @@ When installed via npm, the configuration wizard handles the initial setup. The 
 | `STT_MODEL`                                | STT model name passed to `/audio/transcriptions`                                                                      |    No    | `whisper-large-v3-turbo` |
 | `STT_LANGUAGE`                             | Optional language hint (empty = provider auto-detect)                                                                 |    No    | —                        |
 | `STT_NOTE_PROMPT`                          | Optional note prepended to the LLM prompt as `[Note: ...]` for voice transcriptions; empty / `false` / `0` disable it |    No    | —                        |
-| `TTS_PROVIDER`                             | TTS provider: `openai` for OpenAI-compatible APIs or `google` for Google Cloud TTS                                    |    No    | `openai`                 |
-| `TTS_API_URL`                              | OpenAI-compatible TTS API base URL                                                                                    |    No    | —                        |
-| `TTS_API_KEY`                              | OpenAI-compatible TTS API key                                                                                         |    No    | —                        |
-| `TTS_MODEL`                                | OpenAI-compatible TTS model name passed to `/audio/speech`                                                            |    No    | `gpt-4o-mini-tts`        |
-| `TTS_VOICE`                                | TTS voice name. Defaults to `alloy` for OpenAI-compatible APIs and `en-US-Studio-O` for Google Cloud TTS              |    No    | provider-specific        |
+| `TTS_PROVIDER`                             | TTS provider: `openai` for OpenAI-compatible APIs, `elevenlabs` for ElevenLabs, or `google` for Google Cloud TTS      |    No    | `openai`                 |
+| `TTS_API_URL`                              | TTS API base URL for OpenAI-compatible APIs or ElevenLabs                                                             |    No    | —                        |
+| `TTS_API_KEY`                              | TTS API key for OpenAI-compatible APIs or ElevenLabs                                                                  |    No    | —                        |
+| `TTS_MODEL`                                | TTS model name. Passed as `model` for OpenAI-compatible APIs and `model_id` for ElevenLabs                            |    No    | `gpt-4o-mini-tts`        |
+| `TTS_VOICE`                                | TTS voice name or ElevenLabs voice ID. Defaults to `alloy`, `21m00Tcm4TlvDq8ikWAM`, or `en-US-Studio-O` by provider   |    No    | provider-specific        |
 | `GOOGLE_APPLICATION_CREDENTIALS`           | Path to a Google Cloud service account JSON key file for `TTS_PROVIDER=google`                                        |    No    | —                        |
 | `LOG_LEVEL`                                | Log level (`debug`, `info`, `warn`, `error`)                                                                          |    No    | `info`                   |
 | `LOG_RETENTION`                            | Number of log files to keep: launch files in `sources`, daily files in `installed`                                    |    No    | `10`                     |
@@ -321,6 +321,16 @@ TTS_API_URL=https://api.openai.com/v1
 TTS_API_KEY=your-tts-api-key
 TTS_MODEL=gpt-4o-mini-tts
 TTS_VOICE=alloy
+```
+
+ElevenLabs TTS configuration example:
+
+```env
+TTS_PROVIDER=elevenlabs
+TTS_API_URL=https://api.elevenlabs.io/v1
+TTS_API_KEY=your-elevenlabs-api-key
+TTS_MODEL=eleven_flash_v2_5
+TTS_VOICE=21m00Tcm4TlvDq8ikWAM
 ```
 
 Google Cloud TTS configuration example:

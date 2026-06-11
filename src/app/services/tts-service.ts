@@ -157,12 +157,62 @@ async function synthesizeWithOpenAi(text: string): Promise<TtsResult> {
   }
 }
 
+async function synthesizeWithElevenLabs(text: string): Promise<TtsResult> {
+  const apiUrl = config.tts.apiUrl.replace(/\/+$/, "");
+  const voiceId = config.tts.voice || "21m00Tcm4TlvDq8ikWAM";
+  const url = `${apiUrl}/text-to-speech/${encodeURIComponent(voiceId)}`;
+
+  logger.debug(
+    `[TTS] ElevenLabs: url=${url}, model=${config.tts.model}, voice=${voiceId}, chars=${text.length}`,
+  );
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TTS_REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "xi-api-key": config.tts.apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: config.tts.model || "eleven_flash_v2_5",
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(
+        `TTS API returned HTTP ${response.status}: ${errorBody || response.statusText}`,
+      );
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) {
+      throw new Error("ElevenLabs TTS API returned an empty audio response");
+    }
+
+    logger.debug(`[TTS] Generated ElevenLabs speech audio: ${buffer.length} bytes`);
+    return { buffer, filename: "assistant-reply.mp3", mimeType: "audio/mpeg" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // --- Public API ---
 
 function getNotConfiguredMessage(): string {
-  return config.tts.provider === "google"
-    ? "TTS is not configured: set GOOGLE_APPLICATION_CREDENTIALS for Google Cloud TTS"
-    : "TTS is not configured: set TTS_API_URL and TTS_API_KEY";
+  if (config.tts.provider === "google") {
+    return "TTS is not configured: set GOOGLE_APPLICATION_CREDENTIALS for Google Cloud TTS";
+  }
+  if (config.tts.provider === "elevenlabs") {
+    return "TTS is not configured: set TTS_API_URL and TTS_API_KEY for ElevenLabs";
+  }
+  return "TTS is not configured: set TTS_API_URL and TTS_API_KEY";
 }
 
 export async function synthesizeSpeech(text: string): Promise<TtsResult> {
@@ -180,6 +230,9 @@ export async function synthesizeSpeech(text: string): Promise<TtsResult> {
   try {
     if (config.tts.provider === "google") {
       return await synthesizeWithGoogle(input);
+    }
+    if (config.tts.provider === "elevenlabs") {
+      return await synthesizeWithElevenLabs(input);
     }
     return await synthesizeWithOpenAi(input);
   } catch (err) {

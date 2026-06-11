@@ -105,6 +105,13 @@ describe("isTtsConfigured", () => {
     expect(isTtsConfigured()).toBe(true);
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
   });
+
+  it("returns true when ElevenLabs credentials are set", () => {
+    mockTts.provider = "elevenlabs";
+    mockTts.apiUrl = "https://api.elevenlabs.io/v1";
+    mockTts.apiKey = "xi-test-key";
+    expect(isTtsConfigured()).toBe(true);
+  });
 });
 
 describe("stripMarkdownForSpeech", () => {
@@ -337,5 +344,80 @@ describe("synthesizeSpeech (Google)", () => {
 
     const callArgs = mockSynthesizeSpeech.mock.calls[0];
     expect(callArgs[0].input).toEqual({ text: "Hello bold and code" });
+  });
+});
+
+describe("synthesizeSpeech (ElevenLabs)", () => {
+  beforeEach(() => {
+    mockTts.apiUrl = "https://api.elevenlabs.io/v1";
+    mockTts.apiKey = "xi-test-key";
+    mockTts.provider = "elevenlabs";
+    mockTts.model = "eleven_flash_v2_5";
+    mockTts.voice = "nPczCjzI2devNBz1zQrb";
+    vi.restoreAllMocks();
+  });
+
+  it("throws with provider-specific message when not configured", async () => {
+    mockTts.apiKey = "";
+
+    await expect(synthesizeSpeech("hello")).rejects.toThrow(
+      "TTS_API_URL and TTS_API_KEY for ElevenLabs",
+    );
+  });
+
+  it("sends correct request and returns audio bytes", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(Uint8Array.from([7, 8, 9]), {
+        status: 200,
+        headers: { "Content-Type": "audio/mpeg" },
+      }),
+    );
+
+    const result = await synthesizeSpeech("Hello **bold** world");
+
+    expect(result.filename).toBe("assistant-reply.mp3");
+    expect(result.mimeType).toBe("audio/mpeg");
+    expect(result.buffer).toEqual(Buffer.from([7, 8, 9]));
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, options] = fetchSpy.mock.calls[0];
+    expect(url).toBe("https://api.elevenlabs.io/v1/text-to-speech/nPczCjzI2devNBz1zQrb");
+    expect(options?.method).toBe("POST");
+    expect((options?.headers as Record<string, string>)["xi-api-key"]).toBe("xi-test-key");
+    expect((options?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect((options?.headers as Record<string, string>)["Accept"]).toBe("audio/mpeg");
+    expect(JSON.parse(String(options?.body))).toEqual({
+      text: "Hello bold world",
+      model_id: "eleven_flash_v2_5",
+    });
+  });
+
+  it("trims trailing slashes from the API URL", async () => {
+    mockTts.apiUrl = "https://api.elevenlabs.io/v1/";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(Uint8Array.from([1]), {
+        status: 200,
+        headers: { "Content-Type": "audio/mpeg" },
+      }),
+    );
+
+    await synthesizeSpeech("Hello world");
+
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.elevenlabs.io/v1/text-to-speech/nPczCjzI2devNBz1zQrb",
+    );
+  });
+
+  it("throws on non-OK HTTP response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("Voice not found", {
+        status: 404,
+        statusText: "Not Found",
+      }),
+    );
+
+    await expect(synthesizeSpeech("Hello world")).rejects.toThrow(
+      "TTS API returned HTTP 404: Voice not found",
+    );
   });
 });

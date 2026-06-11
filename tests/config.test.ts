@@ -290,6 +290,31 @@ describe("config boolean env parsing", () => {
     expect(config.tts.model).toBe("gpt-4o-mini-tts");
     expect(config.tts.voice).toBe("alloy");
   });
+
+  it("accepts ElevenLabs as a TTS provider", async () => {
+    vi.stubEnv("TTS_PROVIDER", "elevenlabs");
+    vi.stubEnv("TTS_API_URL", "https://api.elevenlabs.io/v1");
+    vi.stubEnv("TTS_API_KEY", "xi-test-key");
+    vi.stubEnv("TTS_MODEL", "eleven_flash_v2_5");
+    vi.stubEnv("TTS_VOICE", "nPczCjzI2devNBz1zQrb");
+
+    const config = await loadConfig();
+
+    expect(config.tts.provider).toBe("elevenlabs");
+    expect(config.tts.apiUrl).toBe("https://api.elevenlabs.io/v1");
+    expect(config.tts.apiKey).toBe("xi-test-key");
+    expect(config.tts.model).toBe("eleven_flash_v2_5");
+    expect(config.tts.voice).toBe("nPczCjzI2devNBz1zQrb");
+  });
+
+  it("uses an ElevenLabs voice ID default for ElevenLabs TTS", async () => {
+    vi.stubEnv("TTS_PROVIDER", "elevenlabs");
+    vi.stubEnv("TTS_VOICE", "");
+
+    const config = await loadConfig();
+
+    expect(config.tts.voice).toBe("21m00Tcm4TlvDq8ikWAM");
+  });
 });
 
 describe("config telegram reverse-proxy", () => {
