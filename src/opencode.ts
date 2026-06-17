@@ -114,19 +114,45 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 const IDLE_TIMEOUT_MS = 30000;
 
-// Reconnecting global SSE loop. Backoff 1s→15s, 30s idle watchdog forces a reconnect,
-// and a setImmediate yield per event keeps grammy's long-poll from being starved.
+// Backoff for consecutive reconnect attempts: 1s, 2s, 4s, 8s, capped at 15s.
+// `attempt` is 1-based (the Nth consecutive drop without a successful event).
+export function nextBackoff(attempt: number): number {
+  return Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS);
+}
+
+// Injection seams so the reconnect loop is unit-testable without real timers/server.
+export interface EventLoopOpts {
+  sleep?: (ms: number, attempt: number) => Promise<void>;
+  log?: (msg: string) => void;
+}
+
+// Reconnecting global SSE loop. Survives serve blips and the daily container roll.
+//
+// Outer loop re-subscribes until the signal aborts. EVERY drop — a thrown subscribe,
+// a stream that throws mid-iteration, OR a clean stream end while not aborted — is
+// logged exactly once and followed by a backoff sleep before the next subscribe.
+// Backoff escalates (1s→15s) across consecutive drops and RESETS to 1s only after a
+// (re)subscribe that yielded at least one event — so a server that accepts the SSE
+// connection then immediately drops can't spin at 1s forever. `signal.aborted` exits
+// cleanly with no reconnect. A 30s idle watchdog inside the stream forces a reconnect.
+// The setImmediate yield per event keeps grammy's long-poll from being starved.
 export async function runEventLoop(
   client: any,
   cfg: Config,
   onEvent: (ev: OcEvent) => void,
   signal: AbortSignal,
+  opts: EventLoopOpts = {},
 ): Promise<void> {
-  let attempt = 0;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const log =
+    opts.log ?? ((msg: string) => process.stderr.write(`oc-telegram: ${msg}\n`));
+
+  let attempt = 0; // consecutive drops since the last event-bearing subscribe
   while (!signal.aborted) {
+    let deliveredThisConn = false;
+    let reason = "stream ended"; // overwritten if the connection threw
     try {
       const { stream } = await client.global.event({ signal });
-      attempt = 0; // reset backoff on a successful open
       while (!signal.aborted) {
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
         const idle = new Promise<{ idle: true }>((r) => {
@@ -135,6 +161,7 @@ export async function runEventLoop(
         const next = await Promise.race([stream.next(), idle]);
         clearTimeout(idleTimer); // always clear the losing timer once the race settles
         if ((next as any).idle) {
+          reason = "idle timeout";
           await stream.return?.(undefined); // idle watchdog -> close + reconnect
           break;
         }
@@ -143,18 +170,23 @@ export async function runEventLoop(
         // global events are wrapped { directory, payload }; filter to our workdir, unwrap
         if (value?.directory && value.directory !== cfg.workdir) continue;
         const payload = value?.payload ?? value;
-        if (payload && typeof payload.type === "string") onEvent(payload as OcEvent);
+        if (payload && typeof payload.type === "string") {
+          deliveredThisConn = true;
+          onEvent(payload as OcEvent);
+        }
         await new Promise((r) => setImmediate(r)); // yield so grammy long-poll isn't starved
       }
     } catch (e) {
       if (signal.aborted) return;
-      process.stderr.write(
-        `oc-telegram: SSE loop error, reconnecting: ${e instanceof Error ? e.message : String(e)}\n`,
-      );
+      reason = e instanceof Error ? e.message : String(e);
     }
     if (signal.aborted) return;
-    attempt++;
-    const delay = Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS);
-    await new Promise((r) => setTimeout(r, delay));
+    // We dropped (throw, idle, or clean end) while still running -> reconnect. Reset
+    // backoff only if this connection actually delivered an event; otherwise escalate.
+    attempt = deliveredThisConn ? 1 : attempt + 1;
+    // Exactly one log per drop (here, never per retry spin) so a flapping server
+    // doesn't spam — the backoff sleep is what spaces the retries.
+    log(`SSE stream dropped (${reason}), reconnecting (attempt ${attempt})`);
+    await sleep(nextBackoff(attempt), attempt);
   }
 }
