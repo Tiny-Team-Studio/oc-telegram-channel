@@ -28,6 +28,28 @@ export function classifyAttachment(extOrMime: string): AttachmentKind {
   return "document";
 }
 
+// Max inbound photo size we will inline as a base64 data URL into the prompt.
+// A photo is base64'd (~1.33× inflation) and held resident in the prompt JSON;
+// with no 20MB download cap on the self-hosted Bot API, a large image is an OOM
+// risk under the 1500m container mem_limit. Cap at 8MB raw.
+export const MAX_INLINE_PHOTO_BYTES = 8 * 1024 * 1024;
+
+// True when a photo is small enough to inline safely. Pure (testable).
+export function canInlinePhoto(byteLength: number): boolean {
+  return byteLength <= MAX_INLINE_PHOTO_BYTES;
+}
+
+// Text part used in place of an inlined image when the photo is too large to
+// base64 into the prompt. The agent is told the image was received but skipped.
+export function oversizePhotoTextPart(byteLength: number): TextPartInput {
+  const mb = (byteLength / (1024 * 1024)).toFixed(1);
+  const capMb = (MAX_INLINE_PHOTO_BYTES / (1024 * 1024)).toFixed(0);
+  return {
+    type: "text",
+    text: `[a photo (${mb} MB) was received but is too large to process inline (cap ${capMb} MB) — it was not loaded]`,
+  };
+}
+
 // Build a FilePartInput whose bytes travel inline as a base64 data URL — the
 // only way to ship file bytes to the prompt endpoint (no upload endpoint exists;
 // confirmed against packages/sdk/js/src/gen/types.gen.ts FilePartInput.url).

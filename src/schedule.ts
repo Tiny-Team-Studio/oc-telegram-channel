@@ -58,6 +58,13 @@ export type ScheduleDeps = {
 
 export type Schedule = { stop: () => void };
 
+// Pure guard (unit-tested): a scheduled run may only proceed against a finite
+// chat id. An empty/malformed allowlist resolves the target to NaN; running then
+// burns model spend on sendMessage(NaN, …) every tick. Returns false → skip.
+export function isValidTargetChat(chatId: number): boolean {
+  return Number.isFinite(chatId);
+}
+
 // Register one croner job per parsed cron. On fire, run the exact interactive
 // turn-start sequence then send the instructions. Each job is independent; the
 // callback swallows its own errors so one failed run never tears down the timer.
@@ -67,6 +74,14 @@ export function startSchedule(deps: ScheduleDeps): Schedule {
     const job = new Cron(expr, { timezone: tz, name }, async () => {
       try {
         const chatId = deps.getTargetChat();
+        // Fail-closed guard: an empty/malformed allowlist yields Number(undefined)
+        // = NaN. Running the turn would burn a full digest's worth of model spend
+        // against bot.api.sendMessage(NaN, …), erroring into the void every tick.
+        // Skip entirely when there's no valid target chat.
+        if (!isValidTargetChat(chatId)) {
+          console.warn(`[schedule] cron ${name}: no valid target chat (got ${chatId}) — skipping run`);
+          return;
+        }
         const sessionID = await deps.ensureSession(chatId);
         deps.registerTurn(sessionID, chatId);
         await deps.sendPrompt(sessionID, instructions);

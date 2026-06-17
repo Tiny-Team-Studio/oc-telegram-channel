@@ -1,5 +1,15 @@
 import { test, expect } from "bun:test";
-import { parseCrons } from "./schedule.ts";
+import { parseCrons, isValidTargetChat } from "./schedule.ts";
+
+test("isValidTargetChat rejects NaN (empty/malformed allowlist) and accepts a real chat id", () => {
+  // Number(undefined) from an empty allowFrom[0] → NaN → must not run.
+  expect(isValidTargetChat(Number(undefined))).toBe(false);
+  expect(isValidTargetChat(NaN)).toBe(false);
+  expect(isValidTargetChat(Infinity)).toBe(false);
+  // A real DM chat_id (equals the Telegram user id) → run.
+  expect(isValidTargetChat(2111200087)).toBe(true);
+  expect(isValidTargetChat(-100123456)).toBe(true); // supergroup id form
+});
 
 test("single named cron → one entry with name/expr/tz/instructions", () => {
   const env = {

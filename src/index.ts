@@ -7,7 +7,10 @@ import {
   createClient, ensureSession, sendPrompt, runEventLoop, TurnAccumulator, isTurnComplete,
   focusTui, type OcEvent, type PromptPart,
 } from "./opencode.ts";
-import { classifyAttachment, toFilePartInput, voiceTextPart, replyContextPart } from "./inbound.ts";
+import {
+  classifyAttachment, toFilePartInput, voiceTextPart, replyContextPart,
+  canInlinePhoto, oversizePhotoTextPart,
+} from "./inbound.ts";
 import { parseCrons, startSchedule } from "./schedule.ts";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
@@ -35,18 +38,20 @@ const inFlightBySession = new Map<string, number>();
 // Relays OpenCode permission prompts to Telegram as inline Allow/Deny buttons.
 const perms = new PermissionRelay(bot, client, cfg, chatBySession);
 
-// sessionID -> did the agent deliberately deliver via tg_reply this turn?
-// Reset false when a turn starts (inbound); set true by the shim's markReplied.
-// On turn-complete this gates the accumulated-text "delivery floor".
-const repliedThisTurn = new Map<string, boolean>();
+// messageID -> the agent deliberately delivered via tg_reply this turn.
+// Keyed by the turn's assistant messageID (NOT sessionID): a chat has one shared
+// session, so overlapping turns would clobber a session-keyed flag. Absence =
+// not replied (no need to pre-set false on inbound). The shim's markReplied adds
+// the messageID; on turn-complete the floor checks/deletes by done.messageID.
+const repliedThisTurn = new Set<string>();
 
 // Localhost shim into the existing sender. The tg_reply custom tool POSTs here;
-// we resolve the chat and call sendReply, marking the turn as replied so the
-// floor below won't double-send the accumulated text.
+// we resolve the chat and call sendReply, marking the turn (by messageID) as
+// replied so the floor below won't double-send the accumulated text.
 const shim = startShim(Number(cfg.shimPort), {
   sendReply: (chatId, a) => sendReply(bot, cfg, chatId, a),
   getChatId: (s) => chatBySession.get(s),
-  markReplied: (s) => repliedThisTurn.set(s, true),
+  markReplied: (messageID) => repliedThisTurn.add(messageID),
 });
 
 // In-channel cron schedule (OpenCode has no native cron). On fire, a scheduled
@@ -54,14 +59,24 @@ const shim = startShim(Number(cfg.shimPort), {
 // same turn-start sequence as an interactive message, so the digest flows
 // through tg_reply / the delivery floor identically. Target chat = first
 // allowlisted user id (a DM chat_id equals the user id).
+const parsedCrons = parseCrons(process.env);
+// Boot warning: crons are configured but the allowlist is empty/malformed, so
+// the target chat resolves to NaN. The per-fire guard in startSchedule skips the
+// run safely, but surface it loudly at boot so the misconfig is obvious.
+if (parsedCrons.length > 0 && !Number.isFinite(Number(access.allowFrom[0]))) {
+  console.warn(
+    `oc-telegram-channel: ${parsedCrons.length} cron(s) configured but no valid target chat ` +
+      `(allowFrom is empty/malformed) — scheduled runs will be skipped until the allowlist is fixed.`,
+  );
+}
 const schedule = startSchedule({
-  crons: parseCrons(process.env),
+  crons: parsedCrons,
   getTargetChat: () => Number(access.allowFrom[0]),
   ensureSession: (chatId) => ensureSession(client, cfg, chatId),
   sendPrompt: (sid, text) => sendPrompt(client, cfg, sid, text),
   registerTurn: (sid, chatId) => {
     chatBySession.set(sid, chatId);
-    repliedThisTurn.set(sid, false);
+    // No reply-flag pre-set: tracking is messageID-keyed and absence = not replied.
     const c = (inFlightBySession.get(sid) ?? 0) + 1;
     inFlightBySession.set(sid, c);
     if (c === 1) stopTypingBySession.set(sid, startTyping(bot, chatId));
@@ -75,10 +90,9 @@ bot.on("message:text", async (ctx) => {
   try {
     const sessionID = await ensureSession(client, cfg, chatId);
     chatBySession.set(sessionID, chatId);
-    // A new turn starts: clear the reply flag. If the agent calls tg_reply this
-    // turn, the shim flips it true and the floor stays silent; otherwise the
-    // accumulated-text floor delivers on turn-complete.
-    repliedThisTurn.set(sessionID, false);
+    // No reply-flag pre-set: tracking is keyed by the turn's assistant messageID
+    // (set by the shim's markReplied), so absence = not replied. The floor on
+    // turn-complete delivers the accumulated text unless tg_reply was called.
     // Make the attached TUI follow this session (non-blocking, never throws).
     void focusTui(client, sessionID);
     // Refcount in-flight turns per session. Only the 0->1 transition starts typing;
@@ -126,7 +140,7 @@ async function downloadFile(filePath: string): Promise<Uint8Array> {
 async function startInboundTurn(chatId: number, parts: PromptPart[]): Promise<void> {
   const sessionID = await ensureSession(client, cfg, chatId);
   chatBySession.set(sessionID, chatId);
-  repliedThisTurn.set(sessionID, false);
+  // No reply-flag pre-set — tracking is messageID-keyed (absence = not replied).
   void focusTui(client, sessionID);
   const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
   inFlightBySession.set(sessionID, count);
@@ -150,7 +164,14 @@ bot.on("message:photo", async (ctx) => {
       : ext === ".gif" ? "image/gif"
       : "image/jpeg";
     const filename = `photo_${ctx.message.message_id}${ext}`;
-    const parts: PromptPart[] = [toFilePartInput(filename, bytes, mime)];
+    // Cap inbound photo size: a large image base64'd into the prompt is an OOM
+    // risk under the container mem_limit. Over the cap, send a text note instead
+    // of inlining the bytes so the turn still runs without ballooning memory.
+    const parts: PromptPart[] = [
+      canInlinePhoto(bytes.length)
+        ? toFilePartInput(filename, bytes, mime)
+        : oversizePhotoTextPart(bytes.length),
+    ];
     const caption = ctx.message.caption;
     if (caption && caption.trim()) parts.push({ type: "text", text: caption });
     const replyCtx = replyContextPart(ctx.message.reply_to_message, ctx.message.quote?.text);
@@ -238,8 +259,8 @@ function onEvent(ev: OcEvent): void {
   // agent owns its own (possibly multi-message + media) delivery. Only when the
   // agent did NOT call tg_reply do we fall back to sending the accumulated text,
   // honoring NO_REPLY so an intentional silence stays silent.
-  const replied = repliedThisTurn.get(done.sessionID) === true;
-  repliedThisTurn.delete(done.sessionID);
+  const replied = repliedThisTurn.has(done.messageID);
+  repliedThisTurn.delete(done.messageID);
   if (chatId == null) return;
   if (replied) return;
   if (!text) return;

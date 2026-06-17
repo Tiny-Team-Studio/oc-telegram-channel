@@ -16,17 +16,17 @@ function makeDeps(opts: { chatId?: number } = {}): {
     },
     getChatId: (sessionID) =>
       sessionID === "sess-known" ? (opts.chatId ?? 42) : undefined,
-    markReplied: (sessionID) => {
-      replied.push(sessionID);
+    markReplied: (messageID) => {
+      replied.push(messageID);
     },
   };
   return { deps, sent, replied };
 }
 
-test("valid body → sendReply with resolved chatId + text/files/format, marks replied", async () => {
+test("valid body → sendReply with resolved chatId + text/files/format, marks replied by messageID", async () => {
   const { deps, sent, replied } = makeDeps({ chatId: 99 });
   const res = await handleReply(
-    { sessionID: "sess-known", text: "hello", files: ["a.png"], format: "rich" },
+    { sessionID: "sess-known", messageID: "msg-1", text: "hello", files: ["a.png"], format: "rich" },
     deps,
   );
   expect(res).toEqual({ ok: true });
@@ -35,12 +35,13 @@ test("valid body → sendReply with resolved chatId + text/files/format, marks r
   expect(sent[0].args.text).toBe("hello");
   expect(sent[0].args.files).toEqual(["a.png"]);
   expect(sent[0].args.format).toBe("rich");
-  expect(replied).toEqual(["sess-known"]);
+  // Tracking is keyed by messageID (the turn), not sessionID.
+  expect(replied).toEqual(["msg-1"]);
 });
 
 test("unknown sessionID → {ok:false} and does NOT call sendReply or markReplied", async () => {
   const { deps, sent, replied } = makeDeps();
-  const res = await handleReply({ sessionID: "sess-ghost", text: "hi" }, deps);
+  const res = await handleReply({ sessionID: "sess-ghost", messageID: "msg-1", text: "hi" }, deps);
   expect(res.ok).toBe(false);
   expect("error" in res).toBe(true);
   expect(sent.length).toBe(0);
@@ -49,18 +50,35 @@ test("unknown sessionID → {ok:false} and does NOT call sendReply or markReplie
 
 test("missing sessionID → {ok:false} and no dispatch", async () => {
   const { deps, sent } = makeDeps();
-  const res = await handleReply({ text: "hi" } as any, deps);
+  const res = await handleReply({ messageID: "msg-1", text: "hi" } as any, deps);
   expect(res.ok).toBe(false);
   expect(sent.length).toBe(0);
+});
+
+test("missing messageID → {ok:false} and no dispatch", async () => {
+  const { deps, sent, replied } = makeDeps();
+  const res = await handleReply({ sessionID: "sess-known", text: "hi" } as any, deps);
+  expect(res.ok).toBe(false);
+  expect("error" in res && res.error).toContain("messageID");
+  expect(sent.length).toBe(0);
+  expect(replied.length).toBe(0);
+});
+
+test("overlapping turns in one session mark distinct messageIDs (no clobber)", async () => {
+  // Both turns share "sess-known"; messageID keying keeps their flags separate.
+  const { deps, replied } = makeDeps({ chatId: 7 });
+  await handleReply({ sessionID: "sess-known", messageID: "msg-A", text: "from A" }, deps);
+  await handleReply({ sessionID: "sess-known", messageID: "msg-B", text: "from B" }, deps);
+  expect(replied).toEqual(["msg-A", "msg-B"]);
 });
 
 test("NO_REPLY text still routes to sendReply (sender suppresses) and marks replied", async () => {
   // The shim does not itself interpret NO_REPLY — it dispatches to sendReply,
   // which honors isNoReply. markReplied is set so the floor does not double-send.
   const { deps, sent, replied } = makeDeps({ chatId: 7 });
-  const res = await handleReply({ sessionID: "sess-known", text: "NO_REPLY" }, deps);
+  const res = await handleReply({ sessionID: "sess-known", messageID: "msg-1", text: "NO_REPLY" }, deps);
   expect(res).toEqual({ ok: true });
   expect(sent.length).toBe(1);
   expect(sent[0].args.text).toBe("NO_REPLY");
-  expect(replied).toEqual(["sess-known"]);
+  expect(replied).toEqual(["msg-1"]);
 });

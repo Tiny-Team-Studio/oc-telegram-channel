@@ -4,6 +4,9 @@ import {
   toFilePartInput,
   voiceTextPart,
   replyContextPart,
+  canInlinePhoto,
+  oversizePhotoTextPart,
+  MAX_INLINE_PHOTO_BYTES,
 } from "./inbound.ts";
 
 test("classifyAttachment routes by extension", () => {
@@ -46,6 +49,21 @@ test("toFilePartInput accepts a Buffer too", () => {
   const buf = Buffer.from("hi");
   const part = toFilePartInput("x.png", buf, "image/png");
   expect(part.url).toBe("data:image/png;base64,aGk=");
+});
+
+test("canInlinePhoto allows sizes at/under the cap and rejects over", () => {
+  expect(canInlinePhoto(0)).toBe(true);
+  expect(canInlinePhoto(1024)).toBe(true);
+  expect(canInlinePhoto(MAX_INLINE_PHOTO_BYTES)).toBe(true); // exactly at cap is OK
+  expect(canInlinePhoto(MAX_INLINE_PHOTO_BYTES + 1)).toBe(false);
+  expect(canInlinePhoto(20 * 1024 * 1024)).toBe(false); // 20MB photo → skip inline
+});
+
+test("oversizePhotoTextPart returns a text part noting the image was too large", () => {
+  const part = oversizePhotoTextPart(12 * 1024 * 1024);
+  expect(part.type).toBe("text");
+  expect(part.text.toLowerCase()).toContain("too large");
+  expect(part.text).toContain("12.0 MB");
 });
 
 test("voiceTextPart references the inbox path with a transcribe instruction", () => {

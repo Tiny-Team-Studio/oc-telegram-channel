@@ -111,6 +111,15 @@ export class ProgressBubble {
     if (st.messageId == null) {
       try {
         const sent = await this.bot.api.sendMessage(chatId, text, { parse_mode: "HTML" });
+        // Race guard: finish() may have run while sendMessage was in flight,
+        // deleting (or replacing) this session's state entry. If so, the entry
+        // we hold is detached — writing messageId onto it would orphan the
+        // just-sent bubble forever (finish already read messageId==null). Delete
+        // the message we just created instead of storing its id.
+        if (this.state.get(sessionID) !== st) {
+          void this.bot.api.deleteMessage(chatId, sent.message_id).catch(() => {});
+          return;
+        }
         st.messageId = sent.message_id;
         st.lastText = text;
         st.lastEditAt = Date.now();

@@ -8,6 +8,10 @@ import type { Format } from "./config.ts";
 
 export type ReplyBody = {
   sessionID?: string;
+  // The assistant message id of the turn calling tg_reply (ctx.messageID in the
+  // tool). Reply tracking is keyed by this, not sessionID, so overlapping turns
+  // in one chat (which share a session) don't clobber each other's reply flag.
+  messageID?: string;
   text?: string;
   files?: string[];
   format?: Format;
@@ -23,8 +27,10 @@ export type ShimDeps = {
   ) => Promise<void>;
   // Resolve the chat for this session (index.ts chatBySession).
   getChatId: (sessionID: string) => number | undefined;
-  // Record that this turn produced a deliberate reply (delivery-floor switch).
-  markReplied: (sessionID: string) => void;
+  // Record that this turn (keyed by its assistant messageID) produced a
+  // deliberate reply (delivery-floor switch). messageID-keyed so overlapping
+  // same-chat turns can't reset each other's flag.
+  markReplied: (messageID: string) => void;
 };
 
 // Pure, unit-tested core. Validates the body, resolves the chat, dispatches to
@@ -33,6 +39,10 @@ export async function handleReply(body: ReplyBody, deps: ShimDeps): Promise<Shim
   const sessionID = body?.sessionID;
   if (!sessionID || typeof sessionID !== "string") {
     return { ok: false, error: "missing sessionID" };
+  }
+  const messageID = body?.messageID;
+  if (!messageID || typeof messageID !== "string") {
+    return { ok: false, error: "missing messageID" };
   }
   if (typeof body.text !== "string") {
     return { ok: false, error: "missing text" };
@@ -43,7 +53,8 @@ export async function handleReply(body: ReplyBody, deps: ShimDeps): Promise<Shim
   }
   // Mark replied BEFORE the await so an in-flight turn-complete during the send
   // already sees the deliberate reply and suppresses the accumulated-text floor.
-  deps.markReplied(sessionID);
+  // Keyed by messageID (this turn), not sessionID — overlapping turns are distinct.
+  deps.markReplied(messageID);
   await deps.sendReply(chatId, {
     text: body.text,
     ...(body.files ? { files: body.files } : {}),
