@@ -8,5 +8,5 @@ The original grinev fork (`grinev/opencode-telegram-bot`, MIT, forked 2026-06-16
 `c790ec6`, upstream `0.21.2`) is frozen on the **`grinev-ref` branch** and kept ONLY as a
 reference to mine for OpenCode serve/SSE/permission semantics. Never run, never merged.
 
-See `docs/superpowers/plans/2026-06-17-oc-telegram-channel-lean-rebuild.md` (tinyteamxcc repo)
+See `docs/superpowers/plans/2026-06-17-oc-telegram-channel-lean-rebuild.md` (tinyteamxtim repo)
 for the reference map (which grinev file answers which question).
