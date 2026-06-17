@@ -4,7 +4,7 @@ import {
 } from "./telegram.ts";
 import {
   createClient, ensureSession, sendPrompt, runEventLoop, TurnAccumulator, isTurnComplete,
-  type OcEvent,
+  focusTui, type OcEvent,
 } from "./opencode.ts";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
@@ -35,6 +35,8 @@ bot.on("message:text", async (ctx) => {
   try {
     const sessionID = await ensureSession(client, cfg, chatId);
     chatBySession.set(sessionID, chatId);
+    // Make the attached TUI follow this session (non-blocking, never throws).
+    void focusTui(client, sessionID);
     // Refcount in-flight turns per session. Only the 0->1 transition starts typing;
     // an overlapping turn leaves the existing loop running (no second indicator).
     const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
