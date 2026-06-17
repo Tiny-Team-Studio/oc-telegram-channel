@@ -99,3 +99,50 @@ test("replyContextPart caps overly long quoted text", () => {
   expect(part!.text).toContain("x".repeat(500));
   expect(part!.text).not.toContain("x".repeat(501));
 });
+
+test("replyContextPart prefers the highlighted quote span over the parent text", () => {
+  const part = replyContextPart(
+    { text: "tweet 1\n\ntweet 2\n\ntweet 3" },
+    "tweet 2",
+  );
+  expect(part).not.toBeNull();
+  expect(part!.text).toContain("In reply to a highlighted quote");
+  expect(part!.text).toContain("tweet 2");
+  expect(part!.text).not.toContain("tweet 1");
+  expect(part!.text).not.toContain("tweet 3");
+});
+
+test("replyContextPart falls back to parent text when the quote span is absent", () => {
+  const part = replyContextPart({ text: "full parent text" }, undefined);
+  expect(part).not.toBeNull();
+  expect(part!.text).toContain("In reply to an earlier message");
+  expect(part!.text).toContain("full parent text");
+});
+
+test("replyContextPart falls back to parent text when the quote span is empty/whitespace", () => {
+  const part = replyContextPart({ text: "full parent text" }, "   ");
+  expect(part).not.toBeNull();
+  expect(part!.text).toContain("In reply to an earlier message");
+  expect(part!.text).toContain("full parent text");
+});
+
+test("replyContextPart uses the quote span even when there is no parent message", () => {
+  const part = replyContextPart(null, "highlighted span");
+  expect(part).not.toBeNull();
+  expect(part!.text).toContain("In reply to a highlighted quote");
+  expect(part!.text).toContain("highlighted span");
+});
+
+test("replyContextPart returns null when both quote span and parent are absent", () => {
+  expect(replyContextPart(null, undefined)).toBeNull();
+  expect(replyContextPart(undefined, "")).toBeNull();
+  expect(replyContextPart({}, "   ")).toBeNull();
+});
+
+test("replyContextPart caps an overly long highlighted quote span", () => {
+  const long = "y".repeat(2000);
+  const part = replyContextPart({ text: "parent" }, long);
+  expect(part).not.toBeNull();
+  expect(part!.text).toContain("y".repeat(500));
+  expect(part!.text).not.toContain("y".repeat(501));
+});

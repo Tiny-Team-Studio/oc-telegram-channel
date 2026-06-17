@@ -47,10 +47,25 @@ export function toFilePartInput(
 // Returns a TextPartInput that quotes the referenced message's text (or caption),
 // trimmed and capped, so the agent knows exactly what's being replied to. Returns
 // null when there's no usable quoted content (so callers can skip prepending it).
+//
+// `quoteText` is Telegram's `message.quote.text`: the SPECIFIC span the user
+// highlighted before swipe-replying (e.g. one tweet in a multi-tweet message).
+// When present it's what the user actually means, so it's preferred over the
+// full parent text/caption. Falls back to the parent message when no span was
+// highlighted.
 const REPLY_QUOTE_CAP = 500;
 export function replyContextPart(
   replyToMsg: { text?: string; caption?: string } | null | undefined,
+  quoteText?: string,
 ): TextPartInput | null {
+  const span = (quoteText ?? "").trim();
+  if (span) {
+    const quoted = span.length > REPLY_QUOTE_CAP ? span.slice(0, REPLY_QUOTE_CAP) : span;
+    return {
+      type: "text",
+      text: `[In reply to a highlighted quote: "${quoted}"]`,
+    };
+  }
   if (!replyToMsg) return null;
   const raw = (replyToMsg.text ?? replyToMsg.caption ?? "").trim();
   if (!raw) return null;

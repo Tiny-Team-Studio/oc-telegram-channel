@@ -88,7 +88,7 @@ bot.on("message:text", async (ctx) => {
     // Swipe-to-reply: if this message quotes an earlier one, prepend that context
     // so the agent knows which message the user is replying to. Otherwise keep the
     // existing bare-string path unchanged.
-    const replyCtx = replyContextPart(ctx.message.reply_to_message);
+    const replyCtx = replyContextPart(ctx.message.reply_to_message, ctx.message.quote?.text);
     if (replyCtx) {
       await sendPrompt(client, cfg, sessionID, [replyCtx, { type: "text", text: ctx.message.text }]);
     } else {
@@ -152,7 +152,7 @@ bot.on("message:photo", async (ctx) => {
     const parts: PromptPart[] = [toFilePartInput(filename, bytes, mime)];
     const caption = ctx.message.caption;
     if (caption && caption.trim()) parts.push({ type: "text", text: caption });
-    const replyCtx = replyContextPart(ctx.message.reply_to_message);
+    const replyCtx = replyContextPart(ctx.message.reply_to_message, ctx.message.quote?.text);
     if (replyCtx) parts.unshift(replyCtx);
     await startInboundTurn(chatId, parts);
   } catch (e) {
@@ -174,7 +174,7 @@ bot.on(":voice", async (ctx) => {
     const inboxPath = join(INBOX_DIR, `voice_${ctx.msg.message_id}${ext}`);
     await Bun.write(inboxPath, bytes);
     const parts: PromptPart[] = [voiceTextPart(inboxPath)];
-    const replyCtx = replyContextPart(ctx.msg.reply_to_message);
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
     if (replyCtx) parts.unshift(replyCtx);
     await startInboundTurn(chatId, parts);
   } catch (e) {
@@ -203,7 +203,7 @@ bot.on(":document", async (ctx) => {
       : [{ type: "text", text: `[file received at ${inboxPath}]` }];
     const caption = ctx.msg.caption;
     if (caption && caption.trim()) parts.push({ type: "text", text: caption });
-    const replyCtx = replyContextPart(ctx.msg.reply_to_message);
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
     if (replyCtx) parts.unshift(replyCtx);
     await startInboundTurn(chatId, parts);
   } catch (e) {
