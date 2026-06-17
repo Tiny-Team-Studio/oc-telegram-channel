@@ -11,6 +11,7 @@ import { classifyAttachment, toFilePartInput, voiceTextPart, replyContextPart } 
 import { parseCrons, startSchedule } from "./schedule.ts";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
+import { GrammyError } from "grammy";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, extname, basename } from "node:path";
@@ -251,7 +252,9 @@ function onEvent(ev: OcEvent): void {
 const ac = new AbortController();
 runEventLoop(client, cfg, onEvent, ac.signal).catch(() => {});
 
+let shuttingDown = false;
 function shutdown(): void {
+  shuttingDown = true;
   ac.abort();
   schedule.stop();
   shim.stop();
@@ -260,7 +263,62 @@ function shutdown(): void {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
+// Process-level guards: a stray rejection/throw should never silently leave the
+// process alive-but-deaf (MCP/shim stdin keeps it running). Log everything; for
+// an uncaught exception, exit so Docker's restart policy revives a clean process
+// (matches CC's "let the supervisor restart" stance over limping on).
+process.on("unhandledRejection", (reason) => {
+  console.error(`oc-telegram-channel: unhandledRejection: ${String(reason)}`);
+});
+process.on("uncaughtException", (err) => {
+  console.error(`oc-telegram-channel: uncaughtException, exiting for restart: ${String(err)}`);
+  process.exit(1);
+});
+
+// Without this, any throw in a message handler stops polling permanently
+// (grammy's default error handler calls bot.stop() and rethrows). Logging it
+// keeps the long-poll loop alive across handler errors.
+bot.catch((err) => {
+  console.error(`oc-telegram-channel: handler error (polling continues): ${String(err.error)}`);
+});
+
 // Register permission-button callbacks before bot.start so taps are handled.
 perms.registerCallbacks(bot);
 
-bot.start({ onStart: (me) => console.log(`oc-telegram-channel up as @${me.username}`) });
+// Retry polling with backoff on any error. A single ETIMEDOUT/ECONNRESET/DNS
+// failure (or a transient 409 from a not-yet-reaped zombie poller) would reject
+// bot.start() and leave the process alive but deaf to inbound messages until a
+// full restart. Ported from cc-telegram-channel. Backoff caps at 30s; a fatal
+// auth error (invalid token → 401/Unauthorized) is NOT retried — it can't fix
+// itself, so we exit and let Docker surface the misconfig.
+void (async () => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await bot.start({
+        onStart: (me) => {
+          attempt = 0;
+          console.log(`oc-telegram-channel up as @${me.username}`);
+        },
+      });
+      return; // bot.stop() was called — clean exit from the loop
+    } catch (err) {
+      if (shuttingDown) return;
+      // bot.stop() mid-setup rejects with grammy's "Aborted delay" — expected.
+      if (err instanceof Error && err.message === "Aborted delay") return;
+      const isAuthError =
+        err instanceof GrammyError && (err.error_code === 401 || err.error_code === 404);
+      if (isAuthError) {
+        console.error(
+          `oc-telegram-channel: fatal auth error (${err.error_code} ${err.description}) — ` +
+            `invalid bot token, not retrying. Exiting.`,
+        );
+        process.exit(1);
+      }
+      const delay = Math.min(1000 * attempt, 30000);
+      console.error(
+        `oc-telegram-channel: polling error: ${String(err)}, retrying in ${delay / 1000}s`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+})();
