@@ -6,6 +6,7 @@ import {
   createClient, ensureSession, sendPrompt, runEventLoop, TurnAccumulator, isTurnComplete,
   type OcEvent,
 } from "./opencode.ts";
+import { ProgressBubble } from "./progress.ts";
 
 const cfg = loadConfig();
 const access = loadAccess(cfg.accessPath);
@@ -15,6 +16,8 @@ const acc = new TurnAccumulator();
 
 // sessionID -> chatId, so SSE completions route back to the right chat.
 const chatBySession = new Map<string, number>();
+// Live train-of-thought bubble, driven from reasoning/tool SSE parts.
+const bubble = new ProgressBubble(bot, chatBySession);
 // sessionID -> stop-typing fn, so we can clear the typing indicator on completion.
 const stopTypingBySession = new Map<string, () => void>();
 
@@ -36,6 +39,7 @@ bot.on("message:text", async (ctx) => {
 
 function onEvent(ev: OcEvent): void {
   acc.apply(ev);
+  bubble.onEvent(ev); // drive the live progress bubble (independent of completion)
   const done = isTurnComplete(ev);
   if (!done) return;
   const chatId = chatBySession.get(done.sessionID);
@@ -43,6 +47,7 @@ function onEvent(ev: OcEvent): void {
   // can't route the reply — otherwise typing loops and part state leak.
   stopTypingBySession.get(done.sessionID)?.();
   stopTypingBySession.delete(done.sessionID);
+  bubble.finish(done.sessionID); // delete the bubble before the final answer is sent
   const text = acc.text(done.messageID).trim();
   acc.clear(done.messageID);
   if (chatId == null) return;
