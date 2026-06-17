@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync, realpathSync } from "node:fs";
+import { extname } from "node:path";
+import { Bot, InputFile } from "grammy";
+import type { Config, Format } from "./config.ts";
 
 // Telegram caps messages at 4096 chars. Split long replies, preferring
 // paragraph boundaries when chunkMode is 'newline'.
@@ -46,4 +49,204 @@ export function loadAccess(path: string): Access {
 
 export function isAllowed(access: Access, userId: number | string): boolean {
   return access.allowFrom.includes(String(userId));
+}
+
+// --- Reply sender (lifted + de-MCP'd from cc-telegram-channel/server.ts) ---
+
+const MAX_CHUNK_LIMIT = 4096;
+const RICH_MAX_CHARS = 32768; // Bot API 10.1 rich cap (chars). Guarded via .length (UTF-16 units, conservative); over-cap is also caught by the json.ok fallback.
+const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+
+// .jpg/.jpeg/.png/.gif/.webp go as photos (Telegram compresses + shows inline);
+// .ogg/.oga/.mp3/.m4a/.opus go as voice notes (native playable bubble);
+// everything else goes as documents (raw file, no compression).
+const PHOTO_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+const VIDEO_EXTS = new Set([".mp4", ".mov", ".avi", ".mkv", ".webm"]);
+const VOICE_EXTS = new Set([".ogg", ".oga", ".mp3", ".m4a", ".opus"]);
+
+// Telegram caps all media captions at 1024 chars. When a voice file is sent
+// with a longer caption, we send the voice bare and follow up with the text
+// as a threaded reply so nothing is lost.
+const MAX_VOICE_CAPTION = 1024;
+
+// Validate a local file path is resolvable before attempting to send it.
+// (The cc-telegram source also refused to leak the channel's own STATE_DIR;
+// this lean channel has no such state dir, so only the resolvability check
+// remains — statSync below enforces the size guard.)
+function assertSendable(f: string): void {
+  realpathSync(f);
+}
+
+export function createBot(cfg: Config): Bot {
+  return new Bot(cfg.token, { client: { apiRoot: cfg.apiRoot } });
+}
+
+export function startTyping(bot: Bot, chatId: number): () => void {
+  void bot.api.sendChatAction(chatId, "typing").catch(() => {});
+  const interval = setInterval(() => {
+    void bot.api.sendChatAction(chatId, "typing").catch(() => {});
+  }, 5000);
+  return () => clearInterval(interval);
+}
+
+export async function sendReply(
+  bot: Bot,
+  cfg: Config,
+  chatId: number,
+  args: { text: string; format?: Format; files?: string[] },
+): Promise<void> {
+  const text = args.text;
+  const files = args.files ?? [];
+
+  // Silent reply: if the agent returns exactly "NO_REPLY" with no files,
+  // suppress delivery entirely (mirrors cc-slack-channel).
+  if (isNoReply(text, files.length)) return;
+
+  const format: Format = args.format ?? cfg.defaultFormat;
+  let parseMode: "HTML" | undefined = pickParseMode(format);
+
+  const localFiles = files.filter(
+    (f) => !f.startsWith("http://") && !f.startsWith("https://"),
+  );
+  for (const f of localFiles) {
+    assertSendable(f);
+    const st = statSync(f);
+    if (st.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(
+        `file too large: ${f} (${(st.size / 1024 / 1024).toFixed(1)}MB, max 50MB)`,
+      );
+    }
+  }
+
+  const limit = MAX_CHUNK_LIMIT;
+
+  // Rich messages (Bot API 10.1): sendRichMessage takes one HTML string in a
+  // far larger grammar (tables, headings, <details>, blockquotes, …). grammy
+  // has no binding, so call the raw method. Text-bodied structured content
+  // only — rich carries no local-file upload, so a reply with files (local OR
+  // url) is ineligible and degrades to the HTML path below (rich media must
+  // instead be inline <img src="https://…"> in the text).
+  if (format === "rich") {
+    const richEligible = files.length === 0 && text.length <= RICH_MAX_CHARS;
+    if (richEligible) {
+      try {
+        const res = await fetch(`${cfg.apiRoot}/bot${cfg.token}/sendRichMessage`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            rich_message: { html: text },
+          }),
+        });
+        const json = (await res.json()) as {
+          ok: boolean;
+          result?: { message_id: number };
+          description?: string;
+        };
+        if (json.ok && json.result) {
+          return;
+        }
+        process.stderr.write(
+          `telegram channel: sendRichMessage rejected (${json.description ?? "unknown"}) — falling back to HTML\n`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `telegram channel: sendRichMessage threw (${msg}) — falling back to HTML\n`,
+        );
+      }
+    } else {
+      process.stderr.write(
+        `telegram channel: rich ineligible (files=${files.length}, len=${text.length}) — using HTML\n`,
+      );
+    }
+    // Fallback: ship the rich-HTML as best-effort HTML via chunking. Basic
+    // tags still render; block tags (<table>) degrade to raw text.
+    parseMode = "HTML";
+  }
+
+  const chunks = chunk(text, limit, "newline");
+
+  // When files are present, skip sending text as a separate message —
+  // it will be used as caption on the first file instead.
+  const skipTextMessage = files.length > 0;
+  const sentCount = { n: 0 };
+
+  if (!skipTextMessage) {
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        await bot.api.sendMessage(chatId, chunks[i], {
+          ...(parseMode ? { parse_mode: parseMode } : {}),
+        });
+        sentCount.n++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `reply failed after ${sentCount.n} of ${chunks.length} chunk(s) sent: ${msg}`,
+        );
+      }
+    }
+  }
+
+  // Files go as separate messages (Telegram doesn't mix text+file in one
+  // sendMessage call). Supports both local file paths and URLs. URLs are
+  // passed directly to Telegram's API — Telegram downloads them server-side.
+  // When files are present and text was provided, use text as caption on the
+  // first file and skip sending it as a separate sendMessage.
+  let captionUsed = false;
+  for (const f of files) {
+    try {
+      const isUrl = f.startsWith("http://") || f.startsWith("https://");
+      const caption = !captionUsed && text ? text : undefined;
+      const opts = {
+        ...(caption ? { caption, ...(parseMode ? { parse_mode: parseMode } : {}) } : {}),
+      };
+      if (caption) captionUsed = true;
+
+      if (isUrl) {
+        // Detect type from URL path (strip query params).
+        const urlPath = new URL(f).pathname.toLowerCase();
+        const urlExt = extname(urlPath);
+        if (VIDEO_EXTS.has(urlExt)) {
+          await bot.api.sendVideo(chatId, f, opts);
+        } else if (PHOTO_EXTS.has(urlExt) || urlPath.match(/\/media\//)) {
+          // Twitter image URLs sometimes lack extensions — /media/ path is a photo.
+          await bot.api.sendPhoto(chatId, f, opts);
+        } else {
+          await bot.api.sendDocument(chatId, f, opts);
+        }
+      } else {
+        const ext = extname(f).toLowerCase();
+        const input = new InputFile(f);
+        if (PHOTO_EXTS.has(ext)) {
+          await bot.api.sendPhoto(chatId, input, opts);
+        } else if (VIDEO_EXTS.has(ext)) {
+          await bot.api.sendVideo(chatId, input, opts);
+        } else if (VOICE_EXTS.has(ext)) {
+          // Telegram caps captions at 1024 chars. If the caller passed a longer
+          // text alongside the voice file, send the voice without a caption and
+          // follow up with the text so nothing is lost.
+          if (opts.caption && opts.caption.length > MAX_VOICE_CAPTION) {
+            const sent = await bot.api.sendVoice(chatId, input, {});
+            // Send the full text as a follow-up using the existing chunk logic
+            // so long transcripts are split across multiple messages as needed.
+            const followupChunks = chunk(text, limit, "newline");
+            for (const c of followupChunks) {
+              await bot.api.sendMessage(chatId, c, {
+                reply_parameters: { message_id: sent.message_id },
+                ...(parseMode ? { parse_mode: parseMode } : {}),
+              });
+            }
+          } else {
+            await bot.api.sendVoice(chatId, input, opts);
+          }
+        } else {
+          await bot.api.sendDocument(chatId, input, opts);
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`telegram channel: failed to send file ${f}: ${msg}\n`);
+    }
+  }
 }
