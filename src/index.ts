@@ -21,6 +21,10 @@ const chatBySession = new Map<string, number>();
 const bubble = new ProgressBubble(bot, chatBySession);
 // sessionID -> stop-typing fn, so we can clear the typing indicator on completion.
 const stopTypingBySession = new Map<string, () => void>();
+// sessionID -> in-flight turn count. Typing runs while ANY turn for the chat is
+// in flight and stops only when the last one completes — overlapping same-chat
+// turns must not delete each other's typing fn.
+const inFlightBySession = new Map<string, number>();
 // Relays OpenCode permission prompts to Telegram as inline Allow/Deny buttons.
 const perms = new PermissionRelay(bot, client, cfg, chatBySession);
 
@@ -31,9 +35,11 @@ bot.on("message:text", async (ctx) => {
   try {
     const sessionID = await ensureSession(client, cfg, chatId);
     chatBySession.set(sessionID, chatId);
-    // Replace any in-flight typing loop for this session before starting a new one.
-    stopTypingBySession.get(sessionID)?.();
-    stopTypingBySession.set(sessionID, startTyping(bot, chatId));
+    // Refcount in-flight turns per session. Only the 0->1 transition starts typing;
+    // an overlapping turn leaves the existing loop running (no second indicator).
+    const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
+    inFlightBySession.set(sessionID, count);
+    if (count === 1) stopTypingBySession.set(sessionID, startTyping(bot, chatId));
     await sendPrompt(client, cfg, sessionID, ctx.message.text);
   } catch (e) {
     await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
@@ -47,10 +53,17 @@ function onEvent(ev: OcEvent): void {
   const done = isTurnComplete(ev);
   if (!done) return;
   const chatId = chatBySession.get(done.sessionID);
-  // Always stop typing + clear accumulator state for this turn, even if we
-  // can't route the reply — otherwise typing loops and part state leak.
-  stopTypingBySession.get(done.sessionID)?.();
-  stopTypingBySession.delete(done.sessionID);
+  // Decrement the in-flight count; only stop typing when the LAST turn for this
+  // session completes. An overlapping turn keeps the indicator alive. Clear
+  // accumulator state for this turn regardless, so part state never leaks.
+  const remaining = (inFlightBySession.get(done.sessionID) ?? 1) - 1;
+  if (remaining <= 0) {
+    inFlightBySession.delete(done.sessionID);
+    stopTypingBySession.get(done.sessionID)?.();
+    stopTypingBySession.delete(done.sessionID);
+  } else {
+    inFlightBySession.set(done.sessionID, remaining);
+  }
   bubble.finish(done.sessionID); // delete the bubble before the final answer is sent
   const text = acc.text(done.messageID).trim();
   acc.clear(done.messageID);

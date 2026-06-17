@@ -42,9 +42,18 @@ export function pickParseMode(format: "text" | "html" | "rich"): "HTML" | undefi
 export type Access = { allowFrom: string[] };
 
 export function loadAccess(path: string): Access {
-  const raw = JSON.parse(readFileSync(path, "utf8"));
-  const allowFrom = Array.isArray(raw.allowFrom) ? raw.allowFrom.map(String) : [];
-  return { allowFrom };
+  // Fail-closed: a missing/malformed access.json must not crash-loop the bot.
+  // On any error, boot with an empty allowlist (ignore everyone until fixed).
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8"));
+    const allowFrom = Array.isArray(raw.allowFrom) ? raw.allowFrom.map(String) : [];
+    return { allowFrom };
+  } catch (e) {
+    process.stderr.write(
+      `oc-telegram: failed to load access.json (${path}): ${e instanceof Error ? e.message : String(e)} — failing closed (empty allowlist)\n`,
+    );
+    return { allowFrom: [] };
+  }
 }
 
 export function isAllowed(access: Access, userId: number | string): boolean {

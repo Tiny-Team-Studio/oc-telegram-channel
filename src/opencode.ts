@@ -17,25 +17,36 @@ export class TurnAccumulator {
   private parts = new Map<string, Map<string, string>>(); // messageID -> partID -> text
 
   apply(ev: OcEvent): void {
-    if (ev.type !== "message.part.delta" && ev.type !== "message.part.updated") return;
-    const part = ev.properties?.part;
-    if (!part || part.type !== "text") return;       // ignore reasoning/tool/step parts
-    const messageID: string = part.messageID;
-    const partID: string = part.id;
-    const delta: string | undefined = ev.properties?.delta;
-    const snapshot: string | undefined = part.text;
+    if (ev.type === "message.part.delta") {
+      // Flat shape: { sessionID, messageID, partID, field, delta }. No `part` object.
+      // `field` says which field is streaming — only accumulate text.
+      const { messageID, partID, field, delta } = ev.properties ?? {};
+      if (field !== "text" || delta == null) return;
+      const pm = this.ensure(messageID, partID);
+      pm.set(partID, (pm.get(partID) ?? "") + delta);
+      return;
+    }
+    if (ev.type === "message.part.updated") {
+      // Snapshot shape: { sessionID, part, time }; text parts carry part.text.
+      const part = ev.properties?.part;
+      if (part?.type !== "text") return;             // ignore reasoning/tool/step parts
+      const messageID: string = part.messageID;
+      const partID: string = part.id;
+      const pm = this.ensure(messageID, partID);
+      const prev = pm.get(partID) ?? "";
+      if (typeof part.text === "string" && part.text.length >= prev.length) pm.set(partID, part.text);
+      return;
+    }
+  }
 
+  // Lazily create the per-message order list + part map and register first-seen partIDs.
+  private ensure(messageID: string, partID: string): Map<string, string> {
     if (!this.order.has(messageID)) this.order.set(messageID, []);
     if (!this.parts.has(messageID)) this.parts.set(messageID, new Map());
     const ord = this.order.get(messageID)!;
     const pm = this.parts.get(messageID)!;
     if (!pm.has(partID)) ord.push(partID);
-
-    const prev = pm.get(partID) ?? "";
-    let next = prev;
-    if (typeof delta === "string") next = prev + delta;
-    if (typeof snapshot === "string" && snapshot.length >= next.length) next = snapshot;
-    pm.set(partID, next);
+    return pm;
   }
 
   text(messageID: string): string {
@@ -97,10 +108,12 @@ export async function runEventLoop(
       const { stream } = await client.global.event({ signal });
       attempt = 0; // reset backoff on a successful open
       while (!signal.aborted) {
-        const next = await Promise.race([
-          stream.next(),
-          new Promise<{ idle: true }>((r) => setTimeout(() => r({ idle: true }), IDLE_TIMEOUT_MS)),
-        ]);
+        let idleTimer: ReturnType<typeof setTimeout> | undefined;
+        const idle = new Promise<{ idle: true }>((r) => {
+          idleTimer = setTimeout(() => r({ idle: true }), IDLE_TIMEOUT_MS);
+        });
+        const next = await Promise.race([stream.next(), idle]);
+        clearTimeout(idleTimer); // always clear the losing timer once the race settles
         if ((next as any).idle) {
           await stream.return?.(undefined); // idle watchdog -> close + reconnect
           break;
@@ -113,8 +126,11 @@ export async function runEventLoop(
         if (payload && typeof payload.type === "string") onEvent(payload as OcEvent);
         await new Promise((r) => setImmediate(r)); // yield so grammy long-poll isn't starved
       }
-    } catch (_e) {
+    } catch (e) {
       if (signal.aborted) return;
+      process.stderr.write(
+        `oc-telegram: SSE loop error, reconnecting: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
     }
     if (signal.aborted) return;
     attempt++;

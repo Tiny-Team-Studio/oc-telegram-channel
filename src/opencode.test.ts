@@ -18,28 +18,35 @@ test("isTurnComplete fires only on a completed assistant message.updated", () =>
   expect(isTurnComplete({ type: "session.status", properties: {} })).toBeNull();
 });
 
-test("TurnAccumulator concatenates ordered part deltas, snapshot wins over delta", () => {
+test("TurnAccumulator concatenates ordered flat deltas, snapshot wins over delta", () => {
   const acc = new TurnAccumulator();
-  const ev = (partID: string, delta?: string, text?: string): any => ({
+  // Flat message.part.delta: { messageID, partID, field, delta } — no `part` object.
+  const delta = (partID: string, d: string): any => ({
     type: "message.part.delta",
-    properties: { part: { id: partID, messageID: "m1", type: "text", text }, delta },
+    properties: { messageID: "m1", partID, field: "text", delta: d },
   });
-  acc.apply(ev("p1", "Hel"));
-  acc.apply(ev("p1", "lo"));
-  acc.apply(ev("p2", " world"));
+  acc.apply(delta("p1", "Hel"));
+  acc.apply(delta("p1", "lo"));
+  acc.apply(delta("p2", " world"));
   expect(acc.text("m1")).toBe("Hello world");
 
-  // a fuller snapshot replaces the delta-accumulated value
-  acc.apply(ev("p1", undefined, "Hello!"));
+  // a fuller snapshot (message.part.updated, with a `part` object) replaces the delta-accumulated value
+  acc.apply({ type: "message.part.updated", properties: {
+    part: { id: "p1", messageID: "m1", sessionID: "s1", type: "text", text: "Hello!" } } });
   expect(acc.text("m1")).toBe("Hello! world");
 });
 
-test("TurnAccumulator ignores non-text parts and clears on demand", () => {
+test("TurnAccumulator ignores non-text parts/fields and clears on demand", () => {
   const acc = new TurnAccumulator();
+  // reasoning-field delta must not contribute
   acc.apply({ type: "message.part.delta", properties: {
-    part: { id: "r1", messageID: "m1", type: "reasoning", text: "thinking" }, delta: "thinking" } });
+    messageID: "m1", partID: "r1", field: "reasoning", delta: "thinking" } });
+  // reasoning snapshot via message.part.updated must not contribute
+  acc.apply({ type: "message.part.updated", properties: {
+    part: { id: "r1", messageID: "m1", sessionID: "s1", type: "reasoning", text: "thinking" } } });
+  // a text-field delta does contribute
   acc.apply({ type: "message.part.delta", properties: {
-    part: { id: "t1", messageID: "m1", type: "text" }, delta: "answer" } });
+    messageID: "m1", partID: "t1", field: "text", delta: "answer" } });
   expect(acc.text("m1")).toBe("answer");
   acc.clear("m1");
   expect(acc.text("m1")).toBe("");
