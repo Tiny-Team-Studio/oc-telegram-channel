@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 // Telegram caps messages at 4096 chars. Split long replies, preferring
 // paragraph boundaries when chunkMode is 'newline'.
 // Lifted verbatim from cc-telegram-channel/server.ts:425-444.
@@ -30,4 +32,18 @@ export function isNoReply(text: string, fileCount: number): boolean {
 
 export function pickParseMode(format: "text" | "html" | "rich"): "HTML" | undefined {
   return format === "html" ? "HTML" : undefined; // rich is sent via raw sendRichMessage
+}
+
+// DM-only allowlist. allowFrom is a string array of Telegram user IDs — the
+// fleet convention (see gotchas.md "access.json allowFrom must be a string array").
+export type Access = { allowFrom: string[] };
+
+export function loadAccess(path: string): Access {
+  const raw = JSON.parse(readFileSync(path, "utf8"));
+  const allowFrom = Array.isArray(raw.allowFrom) ? raw.allowFrom.map(String) : [];
+  return { allowFrom };
+}
+
+export function isAllowed(access: Access, userId: number | string): boolean {
+  return access.allowFrom.includes(String(userId));
 }

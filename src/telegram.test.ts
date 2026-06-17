@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { chunk, isNoReply, pickParseMode } from "./telegram.ts";
+import { chunk, isNoReply, pickParseMode, isAllowed } from "./telegram.ts";
 
 test("chunk splits on the limit without losing content", () => {
   const parts = chunk("a".repeat(50), 20, "length");
@@ -18,4 +18,11 @@ test("pickParseMode maps formats", () => {
   expect(pickParseMode("html")).toBe("HTML");
   expect(pickParseMode("text")).toBeUndefined();
   expect(pickParseMode("rich")).toBeUndefined(); // rich uses a raw fetch, not grammy parse_mode
+});
+
+test("isAllowed matches string-array allowFrom by stringified id", () => {
+  const access = { allowFrom: ["2111200087"] };
+  expect(isAllowed(access, 2111200087)).toBe(true);
+  expect(isAllowed(access, "2111200087")).toBe(true);
+  expect(isAllowed(access, 999)).toBe(false);
 });
