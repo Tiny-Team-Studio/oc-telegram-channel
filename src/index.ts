@@ -7,6 +7,7 @@ import {
   type OcEvent,
 } from "./opencode.ts";
 import { ProgressBubble } from "./progress.ts";
+import { PermissionRelay } from "./permissions.ts";
 
 const cfg = loadConfig();
 const access = loadAccess(cfg.accessPath);
@@ -20,6 +21,8 @@ const chatBySession = new Map<string, number>();
 const bubble = new ProgressBubble(bot, chatBySession);
 // sessionID -> stop-typing fn, so we can clear the typing indicator on completion.
 const stopTypingBySession = new Map<string, () => void>();
+// Relays OpenCode permission prompts to Telegram as inline Allow/Deny buttons.
+const perms = new PermissionRelay(bot, client, cfg, chatBySession);
 
 bot.on("message:text", async (ctx) => {
   const userId = ctx.from?.id;
@@ -40,6 +43,7 @@ bot.on("message:text", async (ctx) => {
 function onEvent(ev: OcEvent): void {
   acc.apply(ev);
   bubble.onEvent(ev); // drive the live progress bubble (independent of completion)
+  perms.onEvent(ev); // relay permission prompts to Telegram (independent of completion)
   const done = isTurnComplete(ev);
   if (!done) return;
   const chatId = chatBySession.get(done.sessionID);
@@ -66,5 +70,8 @@ function shutdown(): void {
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+// Register permission-button callbacks before bot.start so taps are handled.
+perms.registerCallbacks(bot);
 
 bot.start({ onStart: (me) => console.log(`oc-telegram-channel up as @${me.username}`) });
