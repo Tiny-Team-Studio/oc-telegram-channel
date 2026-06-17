@@ -6,6 +6,8 @@ export interface Config {
   workdir: string;
   accessPath: string;
   defaultFormat: Format;
+  modelProvider: string;
+  modelId: string;
 }
 
 export function loadConfig(): Config {
@@ -19,5 +21,9 @@ export function loadConfig(): Config {
     workdir,
     accessPath: process.env.ACCESS_PATH || `${process.env.HOME}/.config/oc-telegram/access.json`,
     defaultFormat: (process.env.DEFAULT_FORMAT as Format) || "html",
+    // Model is set explicitly per-prompt via the SDK (serve does not reliably pick up
+    // opencode.json's model, and a stale persisted selection can otherwise win).
+    modelProvider: process.env.OPENCODE_MODEL_PROVIDER || "openrouter",
+    modelId: process.env.OPENCODE_MODEL_ID || "deepseek/deepseek-v4-flash",
   };
 }

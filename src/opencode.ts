@@ -85,6 +85,7 @@ export async function sendPrompt(client: any, cfg: Config, sessionID: string, te
   const { error } = await client.session.promptAsync({
     sessionID,
     directory: cfg.workdir,
+    model: { providerID: cfg.modelProvider, modelID: cfg.modelId },
     parts: [{ type: "text", text }],
   });
   if (error) throw new Error(`promptAsync failed: ${JSON.stringify(error)}`);
