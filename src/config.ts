@@ -8,6 +8,7 @@ export interface Config {
   defaultFormat: Format;
   modelProvider: string;
   modelId: string;
+  shimPort: string;
 }
 
 export function loadConfig(): Config {
@@ -25,5 +26,7 @@ export function loadConfig(): Config {
     // opencode.json's model, and a stale persisted selection can otherwise win).
     modelProvider: process.env.OPENCODE_MODEL_PROVIDER || "openrouter",
     modelId: process.env.OPENCODE_MODEL_ID || "deepseek/deepseek-v4-flash",
+    // Localhost shim port for the tg_reply custom tool → existing sendReply.
+    shimPort: process.env.SHIM_PORT || "4097",
   };
 }
