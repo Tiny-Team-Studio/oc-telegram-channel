@@ -7,7 +7,7 @@ import {
   createClient, ensureSession, sendPrompt, runEventLoop, TurnAccumulator, isTurnComplete,
   focusTui, type OcEvent, type PromptPart,
 } from "./opencode.ts";
-import { classifyAttachment, toFilePartInput, voiceTextPart } from "./inbound.ts";
+import { classifyAttachment, toFilePartInput, voiceTextPart, replyContextPart } from "./inbound.ts";
 import { parseCrons, startSchedule } from "./schedule.ts";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
@@ -85,7 +85,15 @@ bot.on("message:text", async (ctx) => {
     const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
     inFlightBySession.set(sessionID, count);
     if (count === 1) stopTypingBySession.set(sessionID, startTyping(bot, chatId));
-    await sendPrompt(client, cfg, sessionID, ctx.message.text);
+    // Swipe-to-reply: if this message quotes an earlier one, prepend that context
+    // so the agent knows which message the user is replying to. Otherwise keep the
+    // existing bare-string path unchanged.
+    const replyCtx = replyContextPart(ctx.message.reply_to_message);
+    if (replyCtx) {
+      await sendPrompt(client, cfg, sessionID, [replyCtx, { type: "text", text: ctx.message.text }]);
+    } else {
+      await sendPrompt(client, cfg, sessionID, ctx.message.text);
+    }
   } catch (e) {
     await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
   }
@@ -144,6 +152,8 @@ bot.on("message:photo", async (ctx) => {
     const parts: PromptPart[] = [toFilePartInput(filename, bytes, mime)];
     const caption = ctx.message.caption;
     if (caption && caption.trim()) parts.push({ type: "text", text: caption });
+    const replyCtx = replyContextPart(ctx.message.reply_to_message);
+    if (replyCtx) parts.unshift(replyCtx);
     await startInboundTurn(chatId, parts);
   } catch (e) {
     await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
@@ -163,7 +173,10 @@ bot.on(":voice", async (ctx) => {
     const ext = extname(file.file_path).toLowerCase() || ".oga";
     const inboxPath = join(INBOX_DIR, `voice_${ctx.msg.message_id}${ext}`);
     await Bun.write(inboxPath, bytes);
-    await startInboundTurn(chatId, [voiceTextPart(inboxPath)]);
+    const parts: PromptPart[] = [voiceTextPart(inboxPath)];
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message);
+    if (replyCtx) parts.unshift(replyCtx);
+    await startInboundTurn(chatId, parts);
   } catch (e) {
     await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
   }
@@ -190,6 +203,8 @@ bot.on(":document", async (ctx) => {
       : [{ type: "text", text: `[file received at ${inboxPath}]` }];
     const caption = ctx.msg.caption;
     if (caption && caption.trim()) parts.push({ type: "text", text: caption });
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message);
+    if (replyCtx) parts.unshift(replyCtx);
     await startInboundTurn(chatId, parts);
   } catch (e) {
     await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});

@@ -40,6 +40,27 @@ export function toFilePartInput(
   return { type: "file", mime, filename, url: `data:${mime};base64,${b64}` };
 }
 
+// Capture swipe-to-reply context. When a user swipe-replies to an earlier message
+// (e.g. a tweet the bot sent), Telegram attaches the quoted message as
+// `reply_to_message`. Without this the agent only sees the user's new text and
+// falls back to "the last thing sent" — losing which message the user meant.
+// Returns a TextPartInput that quotes the referenced message's text (or caption),
+// trimmed and capped, so the agent knows exactly what's being replied to. Returns
+// null when there's no usable quoted content (so callers can skip prepending it).
+const REPLY_QUOTE_CAP = 500;
+export function replyContextPart(
+  replyToMsg: { text?: string; caption?: string } | null | undefined,
+): TextPartInput | null {
+  if (!replyToMsg) return null;
+  const raw = (replyToMsg.text ?? replyToMsg.caption ?? "").trim();
+  if (!raw) return null;
+  const quoted = raw.length > REPLY_QUOTE_CAP ? raw.slice(0, REPLY_QUOTE_CAP) : raw;
+  return {
+    type: "text",
+    text: `[In reply to an earlier message: "${quoted}"]`,
+  };
+}
+
 // Reference a downloaded voice memo by its inbox path and instruct the agent to
 // transcribe it (the `voice-transcribe` skill reads the file from this path).
 export function voiceTextPart(inboxPath: string): TextPartInput {

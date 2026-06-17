@@ -3,6 +3,7 @@ import {
   classifyAttachment,
   toFilePartInput,
   voiceTextPart,
+  replyContextPart,
 } from "./inbound.ts";
 
 test("classifyAttachment routes by extension", () => {
@@ -53,4 +54,48 @@ test("voiceTextPart references the inbox path with a transcribe instruction", ()
   expect(part.text).toContain("/home/opencode/inbox/voice_123.ogg");
   expect(part.text.toLowerCase()).toContain("voice memo");
   expect(part.text.toLowerCase()).toContain("transcribe");
+});
+
+test("replyContextPart uses the quoted message text", () => {
+  const part = replyContextPart({ text: "Just posted this tweet 🚀" });
+  expect(part).not.toBeNull();
+  expect(part!.type).toBe("text");
+  expect(part!.text).toContain("In reply to an earlier message");
+  expect(part!.text).toContain("Just posted this tweet 🚀");
+});
+
+test("replyContextPart falls back to caption when there is no text", () => {
+  const part = replyContextPart({ caption: "Photo caption here" });
+  expect(part).not.toBeNull();
+  expect(part!.text).toContain("Photo caption here");
+});
+
+test("replyContextPart prefers text over caption when both present", () => {
+  const part = replyContextPart({ text: "the text", caption: "the caption" });
+  expect(part!.text).toContain("the text");
+  expect(part!.text).not.toContain("the caption");
+});
+
+test("replyContextPart trims surrounding whitespace in the quote", () => {
+  const part = replyContextPart({ text: "   spaced out   " });
+  expect(part!.text).toContain('"spaced out"');
+  expect(part!.text).not.toContain("   spaced out   ");
+});
+
+test("replyContextPart returns null when there is no usable quoted content", () => {
+  expect(replyContextPart(undefined)).toBeNull();
+  expect(replyContextPart(null)).toBeNull();
+  expect(replyContextPart({})).toBeNull();
+  expect(replyContextPart({ text: "   " })).toBeNull();
+  expect(replyContextPart({ caption: "" })).toBeNull();
+});
+
+test("replyContextPart caps overly long quoted text", () => {
+  const long = "x".repeat(2000);
+  const part = replyContextPart({ text: long });
+  expect(part).not.toBeNull();
+  // quote body capped to ~500 chars (plus the wrapper prose); never the full 2000.
+  expect(part!.text.length).toBeLessThan(600);
+  expect(part!.text).toContain("x".repeat(500));
+  expect(part!.text).not.toContain("x".repeat(501));
 });
