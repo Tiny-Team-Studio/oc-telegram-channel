@@ -8,6 +8,7 @@ import {
   focusTui, type OcEvent, type PromptPart,
 } from "./opencode.ts";
 import { classifyAttachment, toFilePartInput, voiceTextPart } from "./inbound.ts";
+import { parseCrons, startSchedule } from "./schedule.ts";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
 import { mkdirSync } from "node:fs";
@@ -45,6 +46,25 @@ const shim = startShim(Number(cfg.shimPort), {
   sendReply: (chatId, a) => sendReply(bot, cfg, chatId, a),
   getChatId: (s) => chatBySession.get(s),
   markReplied: (s) => repliedThisTurn.set(s, true),
+});
+
+// In-channel cron schedule (OpenCode has no native cron). On fire, a scheduled
+// run opens the owner-DM session and pushes its instructions through the exact
+// same turn-start sequence as an interactive message, so the digest flows
+// through tg_reply / the delivery floor identically. Target chat = first
+// allowlisted user id (a DM chat_id equals the user id).
+const schedule = startSchedule({
+  crons: parseCrons(process.env),
+  getTargetChat: () => Number(access.allowFrom[0]),
+  ensureSession: (chatId) => ensureSession(client, cfg, chatId),
+  sendPrompt: (sid, text) => sendPrompt(client, cfg, sid, text),
+  registerTurn: (sid, chatId) => {
+    chatBySession.set(sid, chatId);
+    repliedThisTurn.set(sid, false);
+    const c = (inFlightBySession.get(sid) ?? 0) + 1;
+    inFlightBySession.set(sid, c);
+    if (c === 1) stopTypingBySession.set(sid, startTyping(bot, chatId));
+  },
 });
 
 bot.on("message:text", async (ctx) => {
@@ -218,6 +238,7 @@ runEventLoop(client, cfg, onEvent, ac.signal).catch(() => {});
 
 function shutdown(): void {
   ac.abort();
+  schedule.stop();
   shim.stop();
   void bot.stop();
 }

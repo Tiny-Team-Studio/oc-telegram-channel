@@ -9,8 +9,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "grammy": "^1.39.2",
-    "@opencode-ai/sdk": "^1.1.21"
+    "@opencode-ai/sdk": "^1.1.21",
+    "croner": "^10.0.1",
+    "grammy": "^1.39.2"
   },
   "devDependencies": {
     "@types/bun": "latest"
