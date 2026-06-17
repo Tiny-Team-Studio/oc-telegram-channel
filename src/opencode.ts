@@ -1,5 +1,8 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2";
 import type { Config } from "./config.ts";
+
+export type PromptPart = TextPartInput | FilePartInput;
 
 export type OcEvent = { type: string; properties: Record<string, any> };
 
@@ -87,12 +90,22 @@ export async function focusTui(client: any, sessionID: string): Promise<void> {
 }
 
 // Fire-and-forget: promptAsync returns immediately; the answer arrives via the SSE loop.
-export async function sendPrompt(client: any, cfg: Config, sessionID: string, text: string): Promise<void> {
+// Accepts EITHER a plain string (existing callers — wrapped to a single text part)
+// OR a parts array (inbound media: TextPartInput[] / FilePartInput[]). The parts
+// array is exactly the SDK prompt shape (types.gen.ts SessionPromptData.parts).
+export async function sendPrompt(
+  client: any,
+  cfg: Config,
+  sessionID: string,
+  input: string | PromptPart[],
+): Promise<void> {
+  const parts: PromptPart[] =
+    typeof input === "string" ? [{ type: "text", text: input }] : input;
   const { error } = await client.session.promptAsync({
     sessionID,
     directory: cfg.workdir,
     model: { providerID: cfg.modelProvider, modelID: cfg.modelId },
-    parts: [{ type: "text", text }],
+    parts,
   });
   if (error) throw new Error(`promptAsync failed: ${JSON.stringify(error)}`);
 }

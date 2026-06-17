@@ -5,10 +5,14 @@ import {
 import { startShim } from "./shim.ts";
 import {
   createClient, ensureSession, sendPrompt, runEventLoop, TurnAccumulator, isTurnComplete,
-  focusTui, type OcEvent,
+  focusTui, type OcEvent, type PromptPart,
 } from "./opencode.ts";
+import { classifyAttachment, toFilePartInput, voiceTextPart } from "./inbound.ts";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, extname, basename } from "node:path";
 
 const cfg = loadConfig();
 const access = loadAccess(cfg.accessPath);
@@ -62,6 +66,111 @@ bot.on("message:text", async (ctx) => {
     inFlightBySession.set(sessionID, count);
     if (count === 1) stopTypingBySession.set(sessionID, startTyping(bot, chatId));
     await sendPrompt(client, cfg, sessionID, ctx.message.text);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+// Per-bot inbox for downloaded media. Voice/document references point the agent
+// here; the voice-transcribe skill reads the file from this path.
+const INBOX_DIR = join(homedir(), "inbox");
+mkdirSync(INBOX_DIR, { recursive: true });
+
+// Resolve a Telegram getFile() result to local bytes. With the self-hosted Bot
+// API in --local mode, file_path is an ABSOLUTE path on the shared volume — read
+// it directly. Otherwise it's a cloud-relative path — fetch over HTTPS. Mirrors
+// cc-telegram-channel/server.ts's `file_path.startsWith('/')` detection.
+async function downloadFile(filePath: string): Promise<Uint8Array> {
+  if (filePath.startsWith("/")) {
+    return new Uint8Array(await Bun.file(filePath).arrayBuffer());
+  }
+  const url = `${cfg.apiRoot}/file/bot${cfg.token}/${filePath}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+// Start a turn for an inbound: ensure the session, route SSE back to this chat,
+// reset the reply flag, focus the TUI, and start the typing indicator (refcounted).
+// Mirrors the message:text turn-start sequence exactly so media turns behave the
+// same way (delivery floor, progress bubble, typing).
+async function startInboundTurn(chatId: number, parts: PromptPart[]): Promise<void> {
+  const sessionID = await ensureSession(client, cfg, chatId);
+  chatBySession.set(sessionID, chatId);
+  repliedThisTurn.set(sessionID, false);
+  void focusTui(client, sessionID);
+  const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
+  inFlightBySession.set(sessionID, count);
+  if (count === 1) stopTypingBySession.set(sessionID, startTyping(bot, chatId));
+  await sendPrompt(client, cfg, sessionID, parts);
+}
+
+// Photos arrive inline as a data-URL FilePartInput so the agent can read the image
+// directly. A caption (if any) rides alongside as a TextPartInput.
+bot.on("message:photo", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return; // silent ignore (DM allowlist)
+  try {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const ext = extname(file.file_path).toLowerCase() || ".jpg";
+    const mime = ext === ".png" ? "image/png"
+      : ext === ".webp" ? "image/webp"
+      : ext === ".gif" ? "image/gif"
+      : "image/jpeg";
+    const filename = `photo_${ctx.message.message_id}${ext}`;
+    const parts: PromptPart[] = [toFilePartInput(filename, bytes, mime)];
+    const caption = ctx.message.caption;
+    if (caption && caption.trim()) parts.push({ type: "text", text: caption });
+    await startInboundTurn(chatId, parts);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+// Voice memos are downloaded to the inbox and referenced by path — the
+// voice-transcribe skill reads the file and acts on it.
+bot.on(":voice", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return;
+  try {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const ext = extname(file.file_path).toLowerCase() || ".oga";
+    const inboxPath = join(INBOX_DIR, `voice_${ctx.msg.message_id}${ext}`);
+    await Bun.write(inboxPath, bytes);
+    await startInboundTurn(chatId, [voiceTextPart(inboxPath)]);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+// Documents are downloaded to the inbox and referenced by path + classification.
+bot.on(":document", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return;
+  try {
+    const doc = ctx.msg.document;
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const origName = doc?.file_name ?? (basename(file.file_path) || `document_${ctx.msg.message_id}`);
+    const inboxPath = join(INBOX_DIR, `doc_${ctx.msg.message_id}_${origName}`);
+    await Bun.write(inboxPath, bytes);
+    // Route audio documents (e.g. .m4a sent as a file) through the voice path so
+    // they still hit voice-transcribe; everything else is a generic file reference.
+    const kind = classifyAttachment(doc?.mime_type ?? extname(origName));
+    const parts: PromptPart[] = kind === "voice"
+      ? [voiceTextPart(inboxPath)]
+      : [{ type: "text", text: `[file received at ${inboxPath}]` }];
+    const caption = ctx.msg.caption;
+    if (caption && caption.trim()) parts.push({ type: "text", text: caption });
+    await startInboundTurn(chatId, parts);
   } catch (e) {
     await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
   }
