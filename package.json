@@ -11,7 +11,8 @@
   "dependencies": {
     "@opencode-ai/sdk": "^1.1.21",
     "croner": "^10.0.1",
-    "grammy": "^1.39.2"
+    "grammy": "^1.39.2",
+    "oc-schedule": "file:../oc-schedule"
   },
   "devDependencies": {
     "@types/bun": "latest"

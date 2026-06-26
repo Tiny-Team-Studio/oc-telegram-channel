@@ -11,7 +11,7 @@ import {
   classifyAttachment, toFilePartInput, voiceTextPart, replyContextPart,
   canInlinePhoto, oversizePhotoTextPart,
 } from "./inbound.ts";
-import { parseCrons, startSchedule } from "./schedule.ts";
+import { parseCrons, startSchedule } from "oc-schedule";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
 import { GrammyError } from "grammy";

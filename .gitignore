@@ -3,3 +3,7 @@ node_modules/
 channel.env
 state/
 *.local
+
+# oc-schedule is cloned alongside on the server as a file: dependency;
+# never commit it into this repo
+oc-schedule/
