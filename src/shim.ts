@@ -56,7 +56,8 @@ export type ShimDeps = {
   // Record that this turn (keyed by its assistant messageID) produced a
   // deliberate reply (delivery-floor switch). messageID-keyed so overlapping
   // same-chat turns can't reset each other's flag.
-  markReplied: (messageID: string) => void;
+  markReplied: (sessionID: string, messageID: string) => void;
+  replaceProgressWithFinal?: (sessionID: string, text: string, format?: Format) => Promise<boolean>;
 };
 
 function resolveChat(body: { sessionID?: string }, deps: ShimDeps): ChatResolution {
@@ -109,7 +110,10 @@ export async function handleReply(body: ReplyBody, deps: ShimDeps): Promise<Shim
   // Mark replied BEFORE the await so an in-flight turn-complete during the send
   // already sees the deliberate reply and suppresses the accumulated-text floor.
   // Keyed by messageID (this turn), not sessionID — overlapping turns are distinct.
-  deps.markReplied(messageID);
+  deps.markReplied(body.sessionID!, messageID);
+  if (!body.files?.length && await deps.replaceProgressWithFinal?.(body.sessionID!, body.text, format.format)) {
+    return { ok: true };
+  }
   await deps.sendReply(chat.chatId, {
     text: body.text,
     ...(body.files ? { files: body.files } : {}),

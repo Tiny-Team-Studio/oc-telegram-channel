@@ -44,6 +44,7 @@ const perms = new PermissionRelay(bot, client, cfg, chatBySession);
 // not replied (no need to pre-set false on inbound). The shim's markReplied adds
 // the messageID; on turn-complete the floor checks/deletes by done.messageID.
 const repliedThisTurn = new Set<string>();
+const repliedThisSession = new Set<string>();
 
 // Localhost shim into the existing sender. The tg_reply custom tool POSTs here;
 // we resolve the chat and call sendReply, marking the turn (by messageID) as
@@ -53,7 +54,11 @@ const shim = startShim(Number(cfg.shimPort), {
   reactMessage: (chatId, a) => reactMessage(bot, chatId, a),
   editMessage: async (chatId, a) => { await editMessage(bot, cfg, chatId, a); },
   getChatId: (s) => chatBySession.get(s),
-  markReplied: (messageID) => repliedThisTurn.add(messageID),
+  markReplied: (sessionID, messageID) => {
+    repliedThisTurn.add(messageID);
+    repliedThisSession.add(sessionID);
+  },
+  replaceProgressWithFinal: (sessionID, text, format) => bubble.replaceWithFinal(sessionID, text, format),
 });
 
 // In-channel cron schedule (OpenCode has no native cron). On fire, a scheduled
@@ -78,6 +83,7 @@ const schedule = startSchedule({
   sendPrompt: (sid, text) => sendPrompt(client, cfg, sid, text),
   registerTurn: (sid, chatId) => {
     chatBySession.set(sid, chatId);
+    repliedThisSession.delete(sid);
     // No reply-flag pre-set: tracking is messageID-keyed and absence = not replied.
     const c = (inFlightBySession.get(sid) ?? 0) + 1;
     inFlightBySession.set(sid, c);
@@ -92,6 +98,7 @@ bot.on("message:text", async (ctx) => {
   try {
     const sessionID = await ensureSession(client, cfg, chatId);
     chatBySession.set(sessionID, chatId);
+    repliedThisSession.delete(sessionID);
     // No reply-flag pre-set: tracking is keyed by the turn's assistant messageID
     // (set by the shim's markReplied), so absence = not replied. The floor on
     // turn-complete delivers the accumulated text unless tg_reply was called.
@@ -142,6 +149,7 @@ async function downloadFile(filePath: string): Promise<Uint8Array> {
 async function startInboundTurn(chatId: number, parts: PromptPart[]): Promise<void> {
   const sessionID = await ensureSession(client, cfg, chatId);
   chatBySession.set(sessionID, chatId);
+  repliedThisSession.delete(sessionID);
   // No reply-flag pre-set — tracking is messageID-keyed (absence = not replied).
   void focusTui(client, sessionID);
   const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
@@ -337,7 +345,6 @@ function onEvent(ev: OcEvent): void {
   } else {
     inFlightBySession.set(done.sessionID, remaining);
   }
-  bubble.finish(done.sessionID); // delete the bubble before the final answer is sent
   const text = acc.text(done.messageID).trim();
   acc.clear(done.messageID);
   // Delivery floor: the agent's normal path is to call tg_reply (via the shim),
@@ -345,13 +352,16 @@ function onEvent(ev: OcEvent): void {
   // agent owns its own (possibly multi-message + media) delivery. Only when the
   // agent did NOT call tg_reply do we fall back to sending the accumulated text,
   // honoring NO_REPLY so an intentional silence stays silent.
-  const replied = repliedThisTurn.has(done.messageID);
+  const replied = repliedThisTurn.has(done.messageID) || repliedThisSession.has(done.sessionID);
   repliedThisTurn.delete(done.messageID);
-  if (chatId == null) return;
-  if (replied) return;
-  if (!text) return;
-  if (isNoReply(text, 0)) return;
-  void sendReply(bot, cfg, chatId, { text, format: cfg.defaultFormat }).catch((e) =>
+  if (chatId == null || replied || !text || isNoReply(text, 0)) {
+    bubble.finish(done.sessionID);
+    return;
+  }
+  void (async () => {
+    if (await bubble.replaceWithFinal(done.sessionID, text, cfg.defaultFormat)) return;
+    await sendReply(bot, cfg, chatId, { text, format: cfg.defaultFormat });
+  })().catch((e) =>
     bot.api.sendMessage(chatId, `⚠️ send failed: ${String(e)}`).catch(() => {}),
   );
 }

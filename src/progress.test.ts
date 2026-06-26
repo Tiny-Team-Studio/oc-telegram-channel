@@ -1,14 +1,12 @@
 import { test, expect } from "bun:test";
 import { renderProgress, ProgressBubble } from "./progress.ts";
 
-test("renderProgress builds an HTML step log and escapes content", () => {
+test("renderProgress builds one natural-language escaped status line", () => {
   const html = renderProgress([
     { kind: "think", label: "Looking at <files>" },
     { kind: "tool", label: "bash: ls" },
   ]);
-  expect(html).toContain("💭");
-  expect(html).toContain("🔧");
-  expect(html).toContain("&lt;files&gt;"); // escaped
+  expect(html).toBe("I'm currently bash: ls.");
 });
 
 // C1 race: finish() runs (deleting the state entry) while the bubble's

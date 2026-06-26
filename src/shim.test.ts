@@ -10,12 +10,12 @@ function makeDeps(opts: { chatId?: number } = {}): {
   sent: SendCall[];
   reacted: ReactCall[];
   edited: EditCall[];
-  replied: string[];
+  replied: Array<{ sessionID: string; messageID: string }>;
 } {
   const sent: SendCall[] = [];
   const reacted: ReactCall[] = [];
   const edited: EditCall[] = [];
-  const replied: string[] = [];
+  const replied: Array<{ sessionID: string; messageID: string }> = [];
   const deps: ShimDeps = {
     sendReply: async (chatId, args) => {
       sent.push({ chatId, args });
@@ -28,8 +28,8 @@ function makeDeps(opts: { chatId?: number } = {}): {
     },
     getChatId: (sessionID) =>
       sessionID === "sess-known" ? (opts.chatId ?? 42) : undefined,
-    markReplied: (messageID) => {
-      replied.push(messageID);
+    markReplied: (sessionID, messageID) => {
+      replied.push({ sessionID, messageID });
     },
   };
   return { deps, sent, reacted, edited, replied };
@@ -47,8 +47,7 @@ test("valid body → sendReply with resolved chatId + text/files/format, marks r
   expect(sent[0].args.text).toBe("hello");
   expect(sent[0].args.files).toEqual(["a.png"]);
   expect(sent[0].args.format).toBe("rich");
-  // Tracking is keyed by messageID (the turn), not sessionID.
-  expect(replied).toEqual(["msg-1"]);
+  expect(replied).toEqual([{ sessionID: "sess-known", messageID: "msg-1" }]);
 });
 
 test("reply_to is resolved to a numeric Telegram message id and forwarded", async () => {
@@ -59,7 +58,7 @@ test("reply_to is resolved to a numeric Telegram message id and forwarded", asyn
   );
   expect(res).toEqual({ ok: true });
   expect(sent[0]).toEqual({ chatId: 99, args: { text: "threaded", reply_to: 123 } });
-  expect(replied).toEqual(["msg-1"]);
+  expect(replied).toEqual([{ sessionID: "sess-known", messageID: "msg-1" }]);
 });
 
 test("invalid reply_to does not dispatch or mark replied", async () => {
@@ -99,12 +98,14 @@ test("missing messageID → {ok:false} and no dispatch", async () => {
   expect(replied.length).toBe(0);
 });
 
-test("overlapping turns in one session mark distinct messageIDs (no clobber)", async () => {
-  // Both turns share "sess-known"; messageID keying keeps their flags separate.
+test("overlapping turns in one session mark distinct messageIDs plus the session", async () => {
   const { deps, replied } = makeDeps({ chatId: 7 });
   await handleReply({ sessionID: "sess-known", messageID: "msg-A", text: "from A" }, deps);
   await handleReply({ sessionID: "sess-known", messageID: "msg-B", text: "from B" }, deps);
-  expect(replied).toEqual(["msg-A", "msg-B"]);
+  expect(replied).toEqual([
+    { sessionID: "sess-known", messageID: "msg-A" },
+    { sessionID: "sess-known", messageID: "msg-B" },
+  ]);
 });
 
 test("NO_REPLY text still routes to sendReply (sender suppresses) and marks replied", async () => {
@@ -115,7 +116,7 @@ test("NO_REPLY text still routes to sendReply (sender suppresses) and marks repl
   expect(res).toEqual({ ok: true });
   expect(sent.length).toBe(1);
   expect(sent[0].args.text).toBe("NO_REPLY");
-  expect(replied).toEqual(["msg-1"]);
+  expect(replied).toEqual([{ sessionID: "sess-known", messageID: "msg-1" }]);
 });
 
 test("react resolves session chat and calls Telegram reaction sender", async () => {

@@ -1,5 +1,6 @@
 import type { Bot } from "grammy";
 import type { OcEvent } from "./opencode.ts";
+import type { Format } from "./config.ts";
 
 // --- Pure formatter (TDD'd) ---
 
@@ -10,18 +11,38 @@ function esc(s: string): string {
 export type Step = { kind: "think" | "tool"; label: string };
 
 const MAX_STEPS = 12;
+const DELIVERY_TOOLS = new Set(["reply", "tg_reply"]);
+
+function isDeliveryTool(tool: string): boolean {
+  const normalized = tool.trim().toLowerCase();
+  return DELIVERY_TOOLS.has(normalized) || normalized.endsWith("__reply");
+}
+
+function friendlyToolLabel(part: any): string {
+  const tool = typeof part.tool === "string" ? part.tool : "tool";
+  const normalized = tool.trim().toLowerCase();
+  const mode = typeof part.state?.input?.mode === "string" ? part.state.input.mode.toLowerCase() : "";
+
+  if (normalized === "memory") {
+    if (mode === "add" || mode === "forget") return "updating my memory";
+    return "checking my memory";
+  }
+  if (normalized === "bash") return "running a command";
+  if (["read", "glob", "grep", "list"].includes(normalized)) return "checking the files";
+  if (["edit", "write", "apply_patch"].includes(normalized)) return "updating files";
+  return `using ${tool.replace(/^mcp__[^_]+__/, "").replace(/_/g, " ")}`;
+}
 
 export function renderProgress(steps: Step[]): string {
-  return steps
-    .slice(-MAX_STEPS)
-    .map((s) => `${s.kind === "think" ? "💭" : "🔧"} ${esc(s.label)}`)
-    .join("\n");
+  const step = steps.slice(-MAX_STEPS).at(-1);
+  if (!step) return "";
+  const label = esc(step.label);
+  return step.kind === "think" ? "I'm thinking this through." : `I'm currently ${label}.`;
 }
 
 // --- ProgressBubble (integration; verified live, not unit-tested) ---
 
 const THROTTLE_MS = 1500;
-const THINK_SNIPPET = 200; // cap reasoning text length so the bubble stays readable
 
 type SessionState = {
   steps: Step[];
@@ -78,17 +99,32 @@ export class ProgressBubble {
       case "reasoning": {
         const text = typeof part.text === "string" ? part.text.trim() : "";
         if (!text) return null;
-        const snippet = text.length > THINK_SNIPPET ? text.slice(0, THINK_SNIPPET) + "…" : text;
-        // Collapse newlines so a multi-line reasoning chunk is one bubble line.
-        return { kind: "think", label: snippet.replace(/\s+/g, " ") };
+        return { kind: "think", label: "thinking" };
       }
       case "tool": {
         const tool = typeof part.tool === "string" ? part.tool : "tool";
-        const status = part.state?.status;
-        return { kind: "tool", label: status ? `${tool} (${status})` : tool };
+        if (isDeliveryTool(tool)) return null;
+        return { kind: "tool", label: friendlyToolLabel(part) };
       }
       default:
         return null; // step-start / text / other → no bubble line
+    }
+  }
+
+  async replaceWithFinal(sessionID: string, text: string, format?: Format): Promise<boolean> {
+    if (format === "rich") return false;
+    const st = this.state.get(sessionID);
+    this.state.delete(sessionID);
+    if (!st?.messageId) return false;
+    const chatId = this.chatBySession.get(sessionID);
+    if (chatId == null) return false;
+    try {
+      await this.bot.api.editMessageText(chatId, st.messageId, text, {
+        ...(format !== "text" ? { parse_mode: "HTML" as const } : {}),
+      });
+      return true;
+    } catch {
+      return false;
     }
   }
 
