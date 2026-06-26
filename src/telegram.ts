@@ -1,6 +1,7 @@
 import { readFileSync, statSync, realpathSync } from "node:fs";
 import { extname } from "node:path";
 import { Bot, InputFile } from "grammy";
+import type { ReactionTypeEmoji } from "grammy/types";
 import type { Config, Format } from "./config.ts";
 
 // Telegram caps messages at 4096 chars. Split long replies, preferring
@@ -102,10 +103,13 @@ export async function sendReply(
   bot: Bot,
   cfg: Config,
   chatId: number,
-  args: { text: string; format?: Format; files?: string[] },
+  args: { text: string; format?: Format; files?: string[]; reply_to?: number },
 ): Promise<void> {
   const text = args.text;
   const files = args.files ?? [];
+  const replyParameters = args.reply_to != null
+    ? { reply_parameters: { message_id: args.reply_to } }
+    : {};
 
   // Silent reply: if the agent returns exactly "NO_REPLY" with no files,
   // suppress delivery entirely (mirrors cc-slack-channel).
@@ -145,6 +149,7 @@ export async function sendReply(
           body: JSON.stringify({
             chat_id: chatId,
             rich_message: { html: text },
+            ...replyParameters,
           }),
         });
         const json = (await res.json()) as {
@@ -185,6 +190,7 @@ export async function sendReply(
     for (let i = 0; i < chunks.length; i++) {
       try {
         await bot.api.sendMessage(chatId, chunks[i], {
+          ...(i === 0 ? replyParameters : {}),
           ...(parseMode ? { parse_mode: parseMode } : {}),
         });
         sentCount.n++;
@@ -208,6 +214,7 @@ export async function sendReply(
       const isUrl = f.startsWith("http://") || f.startsWith("https://");
       const caption = !captionUsed && text ? text : undefined;
       const opts = {
+        ...replyParameters,
         ...(caption ? { caption, ...(parseMode ? { parse_mode: parseMode } : {}) } : {}),
       };
       if (caption) captionUsed = true;
@@ -236,7 +243,7 @@ export async function sendReply(
           // text alongside the voice file, send the voice without a caption and
           // follow up with the text so nothing is lost.
           if (opts.caption && opts.caption.length > MAX_VOICE_CAPTION) {
-            const sent = await bot.api.sendVoice(chatId, input, {});
+            const sent = await bot.api.sendVoice(chatId, input, replyParameters);
             // Send the full text as a follow-up using the existing chunk logic
             // so long transcripts are split across multiple messages as needed.
             const followupChunks = chunk(text, limit, "newline");
@@ -258,4 +265,36 @@ export async function sendReply(
       process.stderr.write(`telegram channel: failed to send file ${f}: ${msg}\n`);
     }
   }
+}
+
+export async function reactMessage(
+  bot: Bot,
+  chatId: number,
+  args: { message_id: number; emoji: string },
+): Promise<void> {
+  await bot.api.setMessageReaction(chatId, args.message_id, [
+    { type: "emoji", emoji: args.emoji as ReactionTypeEmoji["emoji"] },
+  ]);
+}
+
+export async function editMessage(
+  bot: Bot,
+  cfg: Config,
+  chatId: number,
+  args: { message_id: number; text: string; format?: Format },
+): Promise<number> {
+  const format = args.format ?? (cfg.defaultFormat === "rich" ? "html" : cfg.defaultFormat);
+  if (format === "rich") {
+    throw new Error("edit_message does not support rich format; use html or text");
+  }
+  if (args.text.length > MAX_CHUNK_LIMIT) {
+    throw new Error(`edit_message text too long (${args.text.length} chars, max ${MAX_CHUNK_LIMIT})`);
+  }
+  const parseMode = pickParseMode(format);
+  const edited = await bot.api.editMessageText(chatId, args.message_id, args.text, {
+    ...(parseMode ? { parse_mode: parseMode } : {}),
+  });
+  return typeof edited === "object" && edited && "message_id" in edited
+    ? Number(edited.message_id)
+    : args.message_id;
 }

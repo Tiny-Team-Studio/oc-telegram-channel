@@ -106,3 +106,11 @@ export function voiceTextPart(inboxPath: string): TextPartInput {
     text: `[voice memo received at ${inboxPath} — transcribe it]`,
   };
 }
+
+export function mediaTextPart(kind: "audio" | "video" | "video note" | "sticker", inboxPath: string): TextPartInput {
+  const action = kind === "audio" ? "transcribe or inspect it" : "inspect it";
+  return {
+    type: "text",
+    text: `[${kind} received at ${inboxPath} — ${action} if needed]`,
+  };
+}

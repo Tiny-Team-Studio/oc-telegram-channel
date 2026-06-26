@@ -1,6 +1,6 @@
 import { loadConfig } from "./config.ts";
 import {
-  createBot, sendReply, startTyping, loadAccess, isAllowed, isNoReply,
+  createBot, sendReply, reactMessage, editMessage, startTyping, loadAccess, isAllowed, isNoReply,
 } from "./telegram.ts";
 import { startShim } from "./shim.ts";
 import {
@@ -9,7 +9,7 @@ import {
 } from "./opencode.ts";
 import {
   classifyAttachment, toFilePartInput, voiceTextPart, replyContextPart,
-  canInlinePhoto, oversizePhotoTextPart,
+  canInlinePhoto, oversizePhotoTextPart, mediaTextPart,
 } from "./inbound.ts";
 import { parseCrons, startSchedule } from "oc-schedule";
 import { ProgressBubble } from "./progress.ts";
@@ -50,6 +50,8 @@ const repliedThisTurn = new Set<string>();
 // replied so the floor below won't double-send the accumulated text.
 const shim = startShim(Number(cfg.shimPort), {
   sendReply: (chatId, a) => sendReply(bot, cfg, chatId, a),
+  reactMessage: (chatId, a) => reactMessage(bot, chatId, a),
+  editMessage: async (chatId, a) => { await editMessage(bot, cfg, chatId, a); },
   getChatId: (s) => chatBySession.get(s),
   markReplied: (messageID) => repliedThisTurn.add(messageID),
 });
@@ -196,6 +198,90 @@ bot.on(":voice", async (ctx) => {
     const inboxPath = join(INBOX_DIR, `voice_${ctx.msg.message_id}${ext}`);
     await Bun.write(inboxPath, bytes);
     const parts: PromptPart[] = [voiceTextPart(inboxPath)];
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
+    if (replyCtx) parts.unshift(replyCtx);
+    await startInboundTurn(chatId, parts);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+bot.on(":audio", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return;
+  try {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const ext = extname(file.file_path).toLowerCase() || ".mp3";
+    const inboxPath = join(INBOX_DIR, `audio_${ctx.msg.message_id}${ext}`);
+    await Bun.write(inboxPath, bytes);
+    const parts: PromptPart[] = [mediaTextPart("audio", inboxPath)];
+    const caption = ctx.msg.caption;
+    if (caption && caption.trim()) parts.push({ type: "text", text: caption });
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
+    if (replyCtx) parts.unshift(replyCtx);
+    await startInboundTurn(chatId, parts);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+bot.on(":video", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return;
+  try {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const ext = extname(file.file_path).toLowerCase() || ".mp4";
+    const inboxPath = join(INBOX_DIR, `video_${ctx.msg.message_id}${ext}`);
+    await Bun.write(inboxPath, bytes);
+    const parts: PromptPart[] = [mediaTextPart("video", inboxPath)];
+    const caption = ctx.msg.caption;
+    if (caption && caption.trim()) parts.push({ type: "text", text: caption });
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
+    if (replyCtx) parts.unshift(replyCtx);
+    await startInboundTurn(chatId, parts);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+bot.on(":video_note", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return;
+  try {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const ext = extname(file.file_path).toLowerCase() || ".mp4";
+    const inboxPath = join(INBOX_DIR, `video_note_${ctx.msg.message_id}${ext}`);
+    await Bun.write(inboxPath, bytes);
+    const parts: PromptPart[] = [mediaTextPart("video note", inboxPath)];
+    const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
+    if (replyCtx) parts.unshift(replyCtx);
+    await startInboundTurn(chatId, parts);
+  } catch (e) {
+    await bot.api.sendMessage(chatId, `⚠️ ${String(e)}`).catch(() => {});
+  }
+});
+
+bot.on(":sticker", async (ctx) => {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat.id;
+  if (!userId || !isAllowed(access, userId)) return;
+  try {
+    const file = await ctx.getFile();
+    if (!file.file_path) throw new Error("Telegram returned no file_path");
+    const bytes = await downloadFile(file.file_path);
+    const ext = extname(file.file_path).toLowerCase() || ".webp";
+    const inboxPath = join(INBOX_DIR, `sticker_${ctx.msg.message_id}${ext}`);
+    await Bun.write(inboxPath, bytes);
+    const parts: PromptPart[] = [mediaTextPart("sticker", inboxPath)];
     const replyCtx = replyContextPart(ctx.msg.reply_to_message, ctx.msg.quote?.text);
     if (replyCtx) parts.unshift(replyCtx);
     await startInboundTurn(chatId, parts);

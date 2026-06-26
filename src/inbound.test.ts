@@ -7,6 +7,7 @@ import {
   canInlinePhoto,
   oversizePhotoTextPart,
   MAX_INLINE_PHOTO_BYTES,
+  mediaTextPart,
 } from "./inbound.ts";
 
 test("classifyAttachment routes by extension", () => {
@@ -72,6 +73,20 @@ test("voiceTextPart references the inbox path with a transcribe instruction", ()
   expect(part.text).toContain("/home/opencode/inbox/voice_123.ogg");
   expect(part.text.toLowerCase()).toContain("voice memo");
   expect(part.text.toLowerCase()).toContain("transcribe");
+});
+
+test("mediaTextPart describes inbox-backed audio/video/sticker attachments", () => {
+  const audio = mediaTextPart("audio", "/home/opencode/inbox/audio_123.mp3");
+  expect(audio.text).toContain("audio received");
+  expect(audio.text).toContain("/home/opencode/inbox/audio_123.mp3");
+  expect(audio.text).toContain("transcribe or inspect");
+
+  const video = mediaTextPart("video", "/home/opencode/inbox/video_123.mp4");
+  expect(video.text).toContain("video received");
+  expect(video.text).toContain("inspect it");
+
+  const sticker = mediaTextPart("sticker", "/home/opencode/inbox/sticker_123.webp");
+  expect(sticker.text).toContain("sticker received");
 });
 
 test("replyContextPart uses the quoted message text", () => {
