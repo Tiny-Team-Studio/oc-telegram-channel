@@ -14,6 +14,7 @@ import {
 import { parseCrons, startSchedule } from "oc-schedule";
 import { ProgressBubble } from "./progress.ts";
 import { PermissionRelay } from "./permissions.ts";
+import { DeliveryFloor } from "./delivery-floor.ts";
 import { GrammyError } from "grammy";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -38,13 +39,7 @@ const inFlightBySession = new Map<string, number>();
 // Relays OpenCode permission prompts to Telegram as inline Allow/Deny buttons.
 const perms = new PermissionRelay(bot, client, cfg, chatBySession);
 
-// messageID -> the agent deliberately delivered via tg_reply this turn.
-// Keyed by the turn's assistant messageID (NOT sessionID): a chat has one shared
-// session, so overlapping turns would clobber a session-keyed flag. Absence =
-// not replied (no need to pre-set false on inbound). The shim's markReplied adds
-// the messageID; on turn-complete the floor checks/deletes by done.messageID.
-const repliedThisTurn = new Set<string>();
-const repliedThisSession = new Set<string>();
+const deliveryFloor = new DeliveryFloor();
 
 // Localhost shim into the existing sender. The tg_reply custom tool POSTs here;
 // we resolve the chat and call sendReply, marking the turn (by messageID) as
@@ -55,8 +50,7 @@ const shim = startShim(Number(cfg.shimPort), {
   editMessage: async (chatId, a) => { await editMessage(bot, cfg, chatId, a); },
   getChatId: (s) => chatBySession.get(s),
   markReplied: (sessionID, messageID) => {
-    repliedThisTurn.add(messageID);
-    repliedThisSession.add(sessionID);
+    deliveryFloor.markReplied(sessionID, messageID);
   },
   replaceProgressWithFinal: (sessionID, text, format) => bubble.replaceWithFinal(sessionID, text, format),
 });
@@ -83,8 +77,8 @@ const schedule = startSchedule({
   sendPrompt: (sid, text) => sendPrompt(client, cfg, sid, text),
   registerTurn: (sid, chatId) => {
     chatBySession.set(sid, chatId);
-    repliedThisSession.delete(sid);
-    // No reply-flag pre-set: tracking is messageID-keyed and absence = not replied.
+    deliveryFloor.beginTurn(sid);
+    // No reply-flag pre-set: absence means fallback is allowed if no tg_reply arrives.
     const c = (inFlightBySession.get(sid) ?? 0) + 1;
     inFlightBySession.set(sid, c);
     if (c === 1) stopTypingBySession.set(sid, startTyping(bot, chatId));
@@ -98,10 +92,9 @@ bot.on("message:text", async (ctx) => {
   try {
     const sessionID = await ensureSession(client, cfg, chatId);
     chatBySession.set(sessionID, chatId);
-    repliedThisSession.delete(sessionID);
-    // No reply-flag pre-set: tracking is keyed by the turn's assistant messageID
-    // (set by the shim's markReplied), so absence = not replied. The floor on
-    // turn-complete delivers the accumulated text unless tg_reply was called.
+    deliveryFloor.beginTurn(sessionID);
+    // No reply-flag pre-set: absence means fallback is allowed if no tg_reply
+    // arrives before the session becomes idle.
     // Make the attached TUI follow this session (non-blocking, never throws).
     void focusTui(client, sessionID);
     // Refcount in-flight turns per session. Only the 0->1 transition starts typing;
@@ -143,14 +136,14 @@ async function downloadFile(filePath: string): Promise<Uint8Array> {
 }
 
 // Start a turn for an inbound: ensure the session, route SSE back to this chat,
-// reset the reply flag, focus the TUI, and start the typing indicator (refcounted).
+// reset delivery-floor state, focus the TUI, and start the typing indicator (refcounted).
 // Mirrors the message:text turn-start sequence exactly so media turns behave the
 // same way (delivery floor, progress bubble, typing).
 async function startInboundTurn(chatId: number, parts: PromptPart[]): Promise<void> {
   const sessionID = await ensureSession(client, cfg, chatId);
   chatBySession.set(sessionID, chatId);
-  repliedThisSession.delete(sessionID);
-  // No reply-flag pre-set — tracking is messageID-keyed (absence = not replied).
+  deliveryFloor.beginTurn(sessionID);
+  // No reply-flag pre-set: absence means fallback is allowed if no tg_reply arrives.
   void focusTui(client, sessionID);
   const count = (inFlightBySession.get(sessionID) ?? 0) + 1;
   inFlightBySession.set(sessionID, count);
@@ -332,34 +325,38 @@ function onEvent(ev: OcEvent): void {
   bubble.onEvent(ev); // drive the live progress bubble (independent of completion)
   perms.onEvent(ev); // relay permission prompts to Telegram (independent of completion)
   const done = isTurnComplete(ev);
-  if (!done) return;
-  const chatId = chatBySession.get(done.sessionID);
-  // Decrement the in-flight count; only stop typing when the LAST turn for this
-  // session completes. An overlapping turn keeps the indicator alive. Clear
-  // accumulator state for this turn regardless, so part state never leaks.
-  const remaining = (inFlightBySession.get(done.sessionID) ?? 1) - 1;
-  if (remaining <= 0) {
-    inFlightBySession.delete(done.sessionID);
-    stopTypingBySession.get(done.sessionID)?.();
-    stopTypingBySession.delete(done.sessionID);
-  } else {
-    inFlightBySession.set(done.sessionID, remaining);
+  if (done) {
+    const text = acc.text(done.messageID).trim();
+    acc.clear(done.messageID);
+
+    // Store, but don't send yet. Gemini/OpenCode can emit intermediate text
+    // before a later reply-tool call; only session.idle knows the full turn ended.
+    deliveryFloor.recordCompletion(
+      { sessionID: done.sessionID, messageID: done.messageID, text },
+      (value) => isNoReply(value, 0),
+    );
+    return;
   }
-  const text = acc.text(done.messageID).trim();
-  acc.clear(done.messageID);
-  // Delivery floor: the agent's normal path is to call tg_reply (via the shim),
-  // which set repliedThisTurn=true. In that case we send NOTHING here — the
-  // agent owns its own (possibly multi-message + media) delivery. Only when the
-  // agent did NOT call tg_reply do we fall back to sending the accumulated text,
-  // honoring NO_REPLY so an intentional silence stays silent.
-  const replied = repliedThisTurn.has(done.messageID) || repliedThisSession.has(done.sessionID);
-  repliedThisTurn.delete(done.messageID);
-  if (chatId == null || replied || !text || isNoReply(text, 0)) {
-    bubble.finish(done.sessionID);
+
+  if (ev.type !== "session.idle") return;
+  const sessionID = ev.properties?.sessionID;
+  if (!sessionID) return;
+  const chatId = chatBySession.get(sessionID);
+  const remaining = (inFlightBySession.get(sessionID) ?? 1) - 1;
+  if (remaining <= 0) {
+    inFlightBySession.delete(sessionID);
+    stopTypingBySession.get(sessionID)?.();
+    stopTypingBySession.delete(sessionID);
+  } else {
+    inFlightBySession.set(sessionID, remaining);
+  }
+  const text = deliveryFloor.resolveIdle(sessionID);
+  if (chatId == null || !text) {
+    bubble.finish(sessionID);
     return;
   }
   void (async () => {
-    if (await bubble.replaceWithFinal(done.sessionID, text, cfg.defaultFormat)) return;
+    if (await bubble.replaceWithFinal(sessionID, text, cfg.defaultFormat)) return;
     await sendReply(bot, cfg, chatId, { text, format: cfg.defaultFormat });
   })().catch((e) =>
     bot.api.sendMessage(chatId, `⚠️ send failed: ${String(e)}`).catch(() => {}),
