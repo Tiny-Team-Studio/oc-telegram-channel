@@ -399,6 +399,28 @@ bot.catch((err) => {
 // Register permission-button callbacks before bot.start so taps are handled.
 perms.registerCallbacks(bot);
 
+// Eagerly open the owner-DM root session at boot and write its id to the TUI
+// session file, so the entrypoint attaches the tmux pane to the LIVE session
+// (`opencode attach <url> --session <id>`) instead of a blank one — matching
+// oc-slack-channel's ensureEagerChannelRootSession. Runtime focusTui() still
+// switches the attached TUI per inbound; this just gives a live anchor at boot.
+// Fail-open: never block boot over this.
+const TUI_SESSION_FILE = process.env.OC_TUI_SESSION_FILE || "/tmp/oc-tui-session";
+void (async () => {
+  try {
+    const ownerChat = Number(access.allowFrom[0]);
+    if (!Number.isFinite(ownerChat)) return;
+    const sessionID = await ensureSession(client, cfg, ownerChat);
+    chatBySession.set(sessionID, ownerChat);
+    await Bun.write(TUI_SESSION_FILE, sessionID);
+    console.log(
+      `oc-telegram-channel: eager owner-root session ${sessionID} → ${TUI_SESSION_FILE}`,
+    );
+  } catch (err) {
+    console.error(`oc-telegram-channel: eager session failed (continuing): ${String(err)}`);
+  }
+})();
+
 // Retry polling with backoff on any error. A single ETIMEDOUT/ECONNRESET/DNS
 // failure (or a transient 409 from a not-yet-reaped zombie poller) would reject
 // bot.start() and leave the process alive but deaf to inbound messages until a
