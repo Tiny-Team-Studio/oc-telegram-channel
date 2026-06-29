@@ -101,11 +101,17 @@ export async function handleReply(body: ReplyBody, deps: ShimDeps): Promise<Shim
   }
   const format = parseFormat(body.format);
   if (!format.ok) return format;
+  // reply_to is a best-effort quote target, not a delivery precondition: use it
+  // only if it parses to a valid positive Telegram message id. A falsy/malformed
+  // value degrades to a plain (non-quoted) send rather than failing the whole
+  // reply — weak models routinely fill this optional field with "" or "0" on
+  // turns with no message to reply to (e.g. scheduled digests), and erroring
+  // there silently dropped every digest. (react/edit_message still hard-fail on
+  // a bad message_id — they reference a specific message by design.)
   let replyTo: number | undefined;
   if (body.reply_to != null) {
     const parsed = parseMessageId(body.reply_to, "reply_to");
-    if (!parsed.ok) return parsed;
-    replyTo = parsed.messageId;
+    if (parsed.ok) replyTo = parsed.messageId;
   }
   // Mark replied BEFORE the await so an in-flight turn-complete during the send
   // already sees the deliberate reply and suppresses the accumulated-text floor.

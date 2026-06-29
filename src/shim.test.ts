@@ -61,16 +61,27 @@ test("reply_to is resolved to a numeric Telegram message id and forwarded", asyn
   expect(replied).toEqual([{ sessionID: "sess-known", messageID: "msg-1" }]);
 });
 
-test("invalid reply_to does not dispatch or mark replied", async () => {
+// A falsy / malformed reply_to means "no quote target" — it must degrade to a
+// normal (non-quoted) send, never block delivery. Weak models routinely fill
+// the optional reply_to with "" or "0" on turns with no message to reply to
+// (e.g. scheduled digests); erroring there silently dropped every digest.
+test.each([
+  ["empty string", ""],
+  ['"0"', "0"],
+  ["zero number", 0 as any],
+  ["whitespace", "   "],
+  ["non-numeric", "not-a-number"],
+])("falsy/malformed reply_to (%s) degrades to a plain send and still delivers", async (_label, replyTo) => {
   const { deps, sent, replied } = makeDeps({ chatId: 99 });
   const res = await handleReply(
-    { sessionID: "sess-known", messageID: "msg-1", text: "bad", reply_to: "not-a-number" },
+    { sessionID: "sess-known", messageID: "msg-1", text: "digest", reply_to: replyTo },
     deps,
   );
-  expect(res.ok).toBe(false);
-  expect("error" in res && res.error).toContain("reply_to");
-  expect(sent.length).toBe(0);
-  expect(replied.length).toBe(0);
+  expect(res).toEqual({ ok: true });
+  expect(sent.length).toBe(1);
+  expect(sent[0].args.text).toBe("digest");
+  expect(sent[0].args.reply_to).toBeUndefined();
+  expect(replied).toEqual([{ sessionID: "sess-known", messageID: "msg-1" }]);
 });
 
 test("unknown sessionID → {ok:false} and does NOT call sendReply or markReplied", async () => {
