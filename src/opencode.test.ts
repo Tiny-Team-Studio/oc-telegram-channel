@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { isTurnComplete, TurnAccumulator, nextBackoff, runEventLoop, sendPrompt } from "./opencode.ts";
+import { isTurnComplete, TurnAccumulator, nextBackoff, runEventLoop, sendPrompt, resolveModel } from "./opencode.ts";
 
 test("isTurnComplete fires only on a completed assistant message.updated", () => {
   expect(isTurnComplete({ type: "message.updated", properties: {
@@ -67,21 +67,36 @@ test("nextBackoff doubles 1s→15s and caps", () => {
 
 // --- sendPrompt model resolution ---
 
-test("sendPrompt omits model when cfg.modelId is empty (opencode.json wins)", async () => {
+const fakeModelClient = (configModel: string | undefined, capture: (b: any) => void): any => ({
+  config: { get: async () => ({ data: configModel ? { model: configModel } : {} }) },
+  session: { promptAsync: async (b: any) => { capture(b); return { data: {}, error: null }; } },
+});
+
+test("sendPrompt resolves the model from opencode.json config when no env override", async () => {
   let body: any;
-  const client = { session: { promptAsync: async (b: any) => { body = b; return { data: {}, error: null }; } } };
   const cfg: any = { workdir: "/w", modelProvider: "openrouter", modelId: "" };
-  await sendPrompt(client, cfg, "s1", "hi");
-  expect(body.model).toBeUndefined();
+  await sendPrompt(fakeModelClient("openrouter/z-ai/glm-5.2", (b) => (body = b)), cfg, "s1", "hi");
+  expect(body.model).toEqual({ providerID: "openrouter", modelID: "z-ai/glm-5.2" });
   expect(body.parts).toEqual([{ type: "text", text: "hi" }]);
 });
 
-test("sendPrompt includes model when cfg.modelId is set (explicit override)", async () => {
+test("sendPrompt uses the env override when OPENCODE_MODEL_ID (cfg.modelId) is set", async () => {
   let body: any;
-  const client = { session: { promptAsync: async (b: any) => { body = b; return { data: {}, error: null }; } } };
   const cfg: any = { workdir: "/w", modelProvider: "openrouter", modelId: "x/y" };
-  await sendPrompt(client, cfg, "s1", "hi");
+  await sendPrompt(fakeModelClient("openrouter/z-ai/glm-5.2", (b) => (body = b)), cfg, "s1", "hi");
   expect(body.model).toEqual({ providerID: "openrouter", modelID: "x/y" });
+});
+
+test("sendPrompt omits model when config has none and no override", async () => {
+  let body: any;
+  const cfg: any = { workdir: "/w", modelProvider: "openrouter", modelId: "" };
+  await sendPrompt(fakeModelClient(undefined, (b) => (body = b)), cfg, "s1", "hi");
+  expect(body.model).toBeUndefined();
+});
+
+test("resolveModel splits provider/model on the first slash", async () => {
+  const m = await resolveModel({ config: { get: async () => ({ data: { model: "openrouter/z-ai/glm-5.2" } }) } });
+  expect(m).toEqual({ providerID: "openrouter", modelID: "z-ai/glm-5.2" });
 });
 
 // A fake SSE stream that yields the given items then ends (done). `next()`/`return()`

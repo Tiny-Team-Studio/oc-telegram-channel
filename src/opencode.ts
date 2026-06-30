@@ -93,6 +93,30 @@ export async function focusTui(client: any, sessionID: string): Promise<void> {
 // Accepts EITHER a plain string (existing callers — wrapped to a single text part)
 // OR a parts array (inbound media: TextPartInput[] / FilePartInput[]). The parts
 // array is exactly the SDK prompt shape (types.gen.ts SessionPromptData.parts).
+// Resolve the model from OpenCode's own merged config (which reads opencode.json)
+// and pass it EXPLICITLY on every prompt. Two reasons: (1) opencode.json stays the
+// single source of truth for the model; (2) an explicit per-prompt model immunizes
+// the main turn against other components that issue their own session.prompt calls
+// with a different model — notably oc-memory-plugin (opencodeModel) — which
+// otherwise leaks into OpenCode's mutable per-session model resolution and silently
+// runs the turn on the plugin's model. Returns undefined if config has no usable
+// model (then we omit it and let OpenCode fall back to its own default).
+export async function resolveModel(
+  client: any,
+): Promise<{ providerID: string; modelID: string } | undefined> {
+  try {
+    const { data } = await client.config.get();
+    const full: unknown = data?.model;
+    if (typeof full === "string" && full.includes("/")) {
+      const i = full.indexOf("/");
+      return { providerID: full.slice(0, i), modelID: full.slice(i + 1) };
+    }
+  } catch {
+    // fall through — omit model, let OpenCode use its own default
+  }
+  return undefined;
+}
+
 export async function sendPrompt(
   client: any,
   cfg: Config,
@@ -101,12 +125,16 @@ export async function sendPrompt(
 ): Promise<void> {
   const parts: PromptPart[] =
     typeof input === "string" ? [{ type: "text", text: input }] : input;
+  // Model precedence: explicit OPENCODE_MODEL_ID override (rare) → opencode.json
+  // (the default, resolved from the server config). Either way it is passed
+  // explicitly so the plugin's model can never win the main turn.
+  const model = cfg.modelId
+    ? { providerID: cfg.modelProvider, modelID: cfg.modelId }
+    : await resolveModel(client);
   const { error } = await client.session.promptAsync({
     sessionID,
     directory: cfg.workdir,
-    // Omit `model` so OpenCode resolves it from opencode.json (the agent's model).
-    // Only force an override when OPENCODE_MODEL_ID is set (cfg.modelId non-empty).
-    ...(cfg.modelId ? { model: { providerID: cfg.modelProvider, modelID: cfg.modelId } } : {}),
+    ...(model ? { model } : {}),
     parts,
   });
   if (error) throw new Error(`promptAsync failed: ${JSON.stringify(error)}`);
