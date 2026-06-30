@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { isTurnComplete, TurnAccumulator, nextBackoff, runEventLoop } from "./opencode.ts";
+import { isTurnComplete, TurnAccumulator, nextBackoff, runEventLoop, sendPrompt } from "./opencode.ts";
 
 test("isTurnComplete fires only on a completed assistant message.updated", () => {
   expect(isTurnComplete({ type: "message.updated", properties: {
@@ -63,6 +63,25 @@ test("nextBackoff doubles 1s→15s and caps", () => {
   expect(nextBackoff(5)).toBe(15000); // 16000 capped to 15000
   expect(nextBackoff(6)).toBe(15000);
   expect(nextBackoff(99)).toBe(15000);
+});
+
+// --- sendPrompt model resolution ---
+
+test("sendPrompt omits model when cfg.modelId is empty (opencode.json wins)", async () => {
+  let body: any;
+  const client = { session: { promptAsync: async (b: any) => { body = b; return { data: {}, error: null }; } } };
+  const cfg: any = { workdir: "/w", modelProvider: "openrouter", modelId: "" };
+  await sendPrompt(client, cfg, "s1", "hi");
+  expect(body.model).toBeUndefined();
+  expect(body.parts).toEqual([{ type: "text", text: "hi" }]);
+});
+
+test("sendPrompt includes model when cfg.modelId is set (explicit override)", async () => {
+  let body: any;
+  const client = { session: { promptAsync: async (b: any) => { body = b; return { data: {}, error: null }; } } };
+  const cfg: any = { workdir: "/w", modelProvider: "openrouter", modelId: "x/y" };
+  await sendPrompt(client, cfg, "s1", "hi");
+  expect(body.model).toEqual({ providerID: "openrouter", modelID: "x/y" });
 });
 
 // A fake SSE stream that yields the given items then ends (done). `next()`/`return()`

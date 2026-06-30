@@ -104,7 +104,9 @@ export async function sendPrompt(
   const { error } = await client.session.promptAsync({
     sessionID,
     directory: cfg.workdir,
-    model: { providerID: cfg.modelProvider, modelID: cfg.modelId },
+    // Omit `model` so OpenCode resolves it from opencode.json (the agent's model).
+    // Only force an override when OPENCODE_MODEL_ID is set (cfg.modelId non-empty).
+    ...(cfg.modelId ? { model: { providerID: cfg.modelProvider, modelID: cfg.modelId } } : {}),
     parts,
   });
   if (error) throw new Error(`promptAsync failed: ${JSON.stringify(error)}`);

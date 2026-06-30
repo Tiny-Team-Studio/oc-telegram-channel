@@ -15,7 +15,7 @@ test("loadConfig reads required env + defaults", () => {
   expect(c.serveUrl).toBe("http://127.0.0.1:4096");        // default
   expect(c.defaultFormat).toBe("html");
   expect(c.modelProvider).toBe("openrouter");              // default
-  expect(c.modelId).toBe("google/gemini-3.5-flash");       // default
+  expect(c.modelId).toBe("");                              // default = use opencode.json model
 });
 
 test("loadConfig throws when token missing", () => {

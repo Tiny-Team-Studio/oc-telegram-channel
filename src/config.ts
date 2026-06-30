@@ -22,10 +22,13 @@ export function loadConfig(): Config {
     workdir,
     accessPath: process.env.ACCESS_PATH || `${process.env.HOME}/.config/oc-telegram/access.json`,
     defaultFormat: (process.env.DEFAULT_FORMAT as Format) || "html",
-    // Model is set explicitly per-prompt via the SDK (serve does not reliably pick up
-    // opencode.json's model, and a stale persisted selection can otherwise win).
+    // Leave model resolution to OpenCode: with no per-prompt model, serve uses the
+    // agent's model from opencode.json (verified on OpenCode 1.17.7 — a no-model
+    // prompt resolved to opencode.json's model, and no stale persisted selection
+    // exists). Set OPENCODE_MODEL_ID only to FORCE an override; empty (the default)
+    // means "use opencode.json's model". See opencode.ts sendPrompt.
     modelProvider: process.env.OPENCODE_MODEL_PROVIDER || "openrouter",
-    modelId: process.env.OPENCODE_MODEL_ID || "google/gemini-3.5-flash",
+    modelId: process.env.OPENCODE_MODEL_ID || "",
     // Localhost shim port for the tg_reply custom tool → existing sendReply.
     shimPort: process.env.SHIM_PORT || "4097",
   };
